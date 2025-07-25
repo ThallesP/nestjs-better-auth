@@ -78,7 +78,7 @@ export class AuthModule implements NestModule, OnModuleInit {
 
 			for (const method of methods) {
 				const providerMethod = providerPrototype[method];
-				this.setupHooks(providerMethod);
+				this.setupHooks(providerMethod, provider.instance);
 			}
 		}
 	}
@@ -133,7 +133,10 @@ export class AuthModule implements NestModule, OnModuleInit {
 		this.logger.log(`AuthModule initialized BetterAuth on '${basePath}/*'`);
 	}
 
-	private setupHooks(providerMethod: (...args: unknown[]) => unknown) {
+	private setupHooks(
+		providerMethod: (...args: unknown[]) => unknown,
+		providerClass: any,
+	) {
 		if (!this.auth.options.hooks) return;
 
 		for (const { metadataKey, hookType } of HOOKS) {
@@ -147,7 +150,7 @@ export class AuthModule implements NestModule, OnModuleInit {
 				}
 
 				if (hookPath === ctx.path) {
-					await providerMethod(ctx);
+					await providerMethod.apply(providerClass, [ctx]);
 				}
 			});
 		}

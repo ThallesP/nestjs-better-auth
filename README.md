@@ -23,6 +23,7 @@ bun add @thallesp/nestjs-better-auth
 ## Prerequisites
 
 Before you start, make sure you have:
+
 - A working NestJS application
 - Better Auth installed and configured ([installation guide](https://www.better-auth.com/docs/installation))
 
@@ -161,6 +162,7 @@ export class UserController {
 ```
 
 Alternatively, use it as a class decorator to specify access for an entire controller:
+
 ```ts title="app.controller.ts"
 import { Controller, Get } from '@nestjs/common';
 import { Public, Optional } from '@thallesp/nestjs-better-auth';
@@ -180,8 +182,7 @@ Create custom hooks that integrate with NestJS's dependency injection:
 
 ```ts title="hooks/sign-up.hook.ts"
 import { Injectable } from "@nestjs/common";
-import { BeforeHook, Hook } from "@thallesp/nestjs-better-auth";
-import type { AuthContext } from "better-auth";
+import { BeforeHook, Hook, AuthHookContext } from "@thallesp/nestjs-better-auth";
 import { SignUpService } from "./sign-up.service";
 
 @Hook()
@@ -190,7 +191,7 @@ export class SignUpHook {
     constructor(private readonly signUpService: SignUpService) {}
 
     @BeforeHook('/sign-up/email')
-    async handle(ctx: AuthContext) {
+    async handle(ctx: AuthHookContext) {
         // Custom logic like enforcing email domain registration
         // Can throw APIError if validation fails
         await this.signUpService.execute(ctx);
@@ -277,6 +278,7 @@ export class UserController {
 ```
 
 The request object provides:
+
 - `req.session`: The full session object containing user data and authentication state
 - `req.user`: A direct reference to the user object from the session (useful for observability tools like Sentry)
 
