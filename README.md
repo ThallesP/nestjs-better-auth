@@ -47,9 +47,6 @@ async function bootstrap() {
 bootstrap();
 ```
 
-> [!WARNING]  
-> Currently, Better Auth's NestJS integration **only supports Express** and does not work with Fastify.
-
 **2. Import AuthModule**
 
 Import the `AuthModule` in your root module:
