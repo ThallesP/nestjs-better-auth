@@ -55,14 +55,12 @@ bootstrap();
 Import the `AuthModule` in your root module:
 
 ```ts title="app.module.ts"
-import { Module } from '@nestjs/common';
-import { AuthModule } from '@thallesp/nestjs-better-auth';
+import { Module } from "@nestjs/common";
+import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { auth } from "./auth";
 
 @Module({
-  imports: [
-    AuthModule.forRoot(auth),
-  ],
+  imports: [AuthModule.forRoot(auth)],
 })
 export class AppModule {}
 ```
@@ -76,13 +74,13 @@ Better Auth provides an `AuthGuard` to protect your routes. You can choose one o
 Apply the guard to specific controllers or routes:
 
 ```ts title="app.controller.ts"
-import { Controller, Get, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '@thallesp/nestjs-better-auth';
+import { Controller, Get, UseGuards } from "@nestjs/common";
+import { AuthGuard } from "@thallesp/nestjs-better-auth";
 
-@Controller('users')
+@Controller("users")
 @UseGuards(AuthGuard) // Apply to all routes in this controller
 export class UserController {
-  @Get('me')
+  @Get("me")
   async getProfile() {
     return { message: "Protected route" };
   }
@@ -94,15 +92,13 @@ export class UserController {
 Alternatively, you can register the guard globally using `APP_GUARD` to protect all routes by default:
 
 ```ts title="app.module.ts"
-import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
-import { AuthModule, AuthGuard } from '@thallesp/nestjs-better-auth';
+import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+import { AuthModule, AuthGuard } from "@thallesp/nestjs-better-auth";
 import { auth } from "./auth";
 
 @Module({
-  imports: [
-    AuthModule.forRoot(auth),
-  ],
+  imports: [AuthModule.forRoot(auth)],
   providers: [
     {
       provide: APP_GUARD,
@@ -125,12 +121,12 @@ Better Auth provides several decorators to enhance your authentication setup:
 Access the user session in your controllers:
 
 ```ts title="user.controller.ts"
-import { Controller, Get } from '@nestjs/common';
-import { Session, UserSession } from '@thallesp/nestjs-better-auth';
+import { Controller, Get } from "@nestjs/common";
+import { Session, UserSession } from "@thallesp/nestjs-better-auth";
 
-@Controller('users')
+@Controller("users")
 export class UserController {
-  @Get('me')
+  @Get("me")
   async getProfile(@Session() session: UserSession) {
     return session;
   }
@@ -142,18 +138,18 @@ export class UserController {
 Control authentication requirements for specific routes:
 
 ```ts title="app.controller.ts"
-import { Controller, Get } from '@nestjs/common';
-import { Public, Optional } from '@thallesp/nestjs-better-auth';
+import { Controller, Get } from "@nestjs/common";
+import { Public, Optional } from "@thallesp/nestjs-better-auth";
 
-@Controller('users')
+@Controller("users")
 export class UserController {
-  @Get('public')
+  @Get("public")
   @Public() // Mark this route as public (no authentication required)
   async publicRoute() {
     return { message: "This route is public" };
   }
 
-  @Get('optional')
+  @Get("optional")
   @Optional() // Authentication is optional for this route
   async optionalRoute(@Session() session: UserSession) {
     return { authenticated: !!session, session };
@@ -164,16 +160,20 @@ export class UserController {
 Alternatively, use it as a class decorator to specify access for an entire controller:
 
 ```ts title="app.controller.ts"
-import { Controller, Get } from '@nestjs/common';
-import { Public, Optional } from '@thallesp/nestjs-better-auth';
+import { Controller, Get } from "@nestjs/common";
+import { Public, Optional } from "@thallesp/nestjs-better-auth";
 
 @Public() // All routes inside this controller are public
-@Controller('public')
-export class PublicController { /* */ }
+@Controller("public")
+export class PublicController {
+  /* */
+}
 
 @Optional() // Authentication is optional for all routes inside this controller
-@Controller('optional')
-export class OptionalController { /* */ }
+@Controller("optional")
+export class OptionalController {
+  /* */
+}
 ```
 
 ### Hook Decorators
@@ -182,36 +182,38 @@ Create custom hooks that integrate with NestJS's dependency injection:
 
 ```ts title="hooks/sign-up.hook.ts"
 import { Injectable } from "@nestjs/common";
-import { BeforeHook, Hook, AuthHookContext } from "@thallesp/nestjs-better-auth";
+import {
+  BeforeHook,
+  Hook,
+  AuthHookContext,
+} from "@thallesp/nestjs-better-auth";
 import { SignUpService } from "./sign-up.service";
 
 @Hook()
 @Injectable()
 export class SignUpHook {
-    constructor(private readonly signUpService: SignUpService) {}
+  constructor(private readonly signUpService: SignUpService) {}
 
-    @BeforeHook('/sign-up/email')
-    async handle(ctx: AuthHookContext) {
-        // Custom logic like enforcing email domain registration
-        // Can throw APIError if validation fails
-        await this.signUpService.execute(ctx);
-    }
+  @BeforeHook("/sign-up/email")
+  async handle(ctx: AuthHookContext) {
+    // Custom logic like enforcing email domain registration
+    // Can throw APIError if validation fails
+    await this.signUpService.execute(ctx);
+  }
 }
 ```
 
 Register your hooks in a module:
 
 ```ts title="app.module.ts"
-import { Module } from '@nestjs/common';
-import { AuthModule } from '@thallesp/nestjs-better-auth';
-import { SignUpHook } from './hooks/sign-up.hook';
-import { SignUpService } from './sign-up.service';
+import { Module } from "@nestjs/common";
+import { AuthModule } from "@thallesp/nestjs-better-auth";
+import { SignUpHook } from "./hooks/sign-up.hook";
+import { SignUpService } from "./sign-up.service";
 import { auth } from "./auth";
 
 @Module({
-  imports: [
-    AuthModule.forRoot(auth),
-  ],
+  imports: [AuthModule.forRoot(auth)],
   providers: [SignUpHook, SignUpService],
 })
 export class AppModule {}
@@ -222,34 +224,41 @@ export class AppModule {}
 The `AuthService` is automatically provided by the `AuthModule` and can be injected into your controllers to access the Better Auth instance and its API endpoints.
 
 ```ts title="users.controller.ts"
-import { Controller, Get, Post, Request, Body, UseGuards } from '@nestjs/common';
-import { AuthGuard, AuthService } from '@thallesp/nestjs-better-auth';
-import { fromNodeHeaders } from 'better-auth/node';
-import type { Request as ExpressRequest } from 'express';
-import { auth } from '../auth';
+import {
+  Controller,
+  Get,
+  Post,
+  Request,
+  Body,
+  UseGuards,
+} from "@nestjs/common";
+import { AuthGuard, AuthService } from "@thallesp/nestjs-better-auth";
+import { fromNodeHeaders } from "better-auth/node";
+import type { Request as ExpressRequest } from "express";
+import { auth } from "../auth";
 
-@Controller('users')
+@Controller("users")
 @UseGuards(AuthGuard)
 export class UsersController {
   constructor(private authService: AuthService<typeof auth>) {}
 
-  @Get('accounts')
+  @Get("accounts")
   async getAccounts(@Request() req: ExpressRequest) {
     // Pass the request headers to the auth API
     const accounts = await this.authService.api.listUserAccounts({
       headers: fromNodeHeaders(req.headers),
     });
-    
+
     return { accounts };
   }
 
-  @Post('api-keys')
+  @Post("api-keys")
   async createApiKey(@Request() req: ExpressRequest, @Body() body) {
     // Access plugin-specific functionality with request headers
     // createApiKey is a method added by a plugin, not part of the core API
     return this.authService.api.createApiKey({
       ...body,
-      headers: fromNodeHeaders(req.headers)
+      headers: fromNodeHeaders(req.headers),
     });
   }
 }
@@ -262,12 +271,12 @@ When using plugins that extend the Auth type with additional functionality, use 
 You can access the session and user through the request object:
 
 ```ts
-import { Controller, Get, Request } from '@nestjs/common';
-import type { Request as ExpressRequest } from 'express';
+import { Controller, Get, Request } from "@nestjs/common";
+import type { Request as ExpressRequest } from "express";
 
-@Controller('users')
+@Controller("users")
 export class UserController {
-  @Get('me')
+  @Get("me")
   async getProfile(@Request() req: ExpressRequest) {
     return {
       session: req.session, // Session is attached to the request
@@ -287,7 +296,7 @@ The request object provides:
 Better Auth's NestJS integration includes a built-in exception filter for handling `APIError` instances. You can disable this filter and implement your own:
 
 ```typescript
-AuthModule.forRoot(auth, { disableExceptionFilter: true })
+AuthModule.forRoot(auth, { disableExceptionFilter: true });
 ```
 
 Then you can create your own exception filter:
@@ -298,7 +307,7 @@ export class CustomAPIErrorFilter implements ExceptionFilter {
   catch(exception: APIError, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse();
-    
+
     // Your custom error handling logic
     response.status(exception.statusCode).json({
       statusCode: exception.statusCode,
@@ -320,14 +329,14 @@ When configuring `AuthModule.forRoot()`, you can provide options to customize th
 AuthModule.forRoot(auth, {
   disableExceptionFilter: false,
   disableTrustedOriginsCors: false,
-  disableBodyParser: false
-})
+  disableBodyParser: false,
+});
 ```
 
 The available options are:
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `disableExceptionFilter` | `false` | When set to `true`, disables the built-in exception filter for handling `APIError` instances. Use this if you want to implement your own custom exception filter. |
+| Option                      | Default | Description                                                                                                                                                              |
+| --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `disableExceptionFilter`    | `false` | When set to `true`, disables the built-in exception filter for handling `APIError` instances. Use this if you want to implement your own custom exception filter.        |
 | `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. Use this if you want to handle CORS configuration manually. |
-| `disableBodyParser` | `false` | When set to `true`, disables the automatic body parser middleware. Use this if you want to handle request body parsing manually. |
+| `disableBodyParser`         | `false` | When set to `true`, disables the automatic body parser middleware. Use this if you want to handle request body parsing manually.                                         |

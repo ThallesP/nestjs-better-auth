@@ -2,9 +2,11 @@ import { Inject, Logger, Module } from "@nestjs/common";
 import type {
 	DynamicModule,
 	MiddlewareConsumer,
+	ModuleMetadata,
 	NestModule,
 	OnModuleInit,
 	Provider,
+	Type,
 } from "@nestjs/common";
 import {
 	APP_FILTER,
@@ -36,6 +38,63 @@ type AuthModuleOptions = {
 	disableTrustedOriginsCors?: boolean;
 	disableBodyParser?: boolean;
 };
+
+/**
+ * Factory for creating Auth instance and module options asynchronously
+ */
+export interface AuthModuleAsyncOptions
+	extends Pick<ModuleMetadata, "imports"> {
+	/**
+	 * Factory function that returns an object with auth instance and optional module options
+	 */
+	useFactory: (...args: unknown[]) =>
+		| Promise<{
+				// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+				auth: any;
+				options?: AuthModuleOptions;
+		  }>
+		| {
+				// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+				auth: any;
+				options?: AuthModuleOptions;
+		  };
+	/**
+	 * Providers to inject into the factory function
+	 */
+	inject?: (string | symbol | Type<unknown>)[];
+	/**
+	 * Use an existing provider class
+	 */
+	useClass?: Type<{
+		createAuthOptions():
+			| Promise<{
+					// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+					auth: any;
+					options?: AuthModuleOptions;
+			  }>
+			| {
+					// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+					auth: any;
+					options?: AuthModuleOptions;
+			  };
+	}>;
+	/**
+	 * Use an existing provider
+	 */
+	useExisting?: Type<{
+		createAuthOptions():
+			| Promise<{
+					// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+					auth: any;
+					options?: AuthModuleOptions;
+			  }>
+			| {
+					// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+					auth: any;
+					options?: AuthModuleOptions;
+			  };
+	}>;
+}
 
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
@@ -161,7 +220,7 @@ export class AuthModule implements NestModule, OnModuleInit {
 	 * @param options - Configuration options for the module
 	 */
 	static forRoot(
-		// biome-ignore lint/suspicious/noExplicitAny: i still need to find a type for the auth instance
+		// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
 		auth: any,
 		options: AuthModuleOptions = {},
 	): DynamicModule {
@@ -206,6 +265,197 @@ export class AuthModule implements NestModule, OnModuleInit {
 				},
 				AuthService,
 			],
+		};
+	}
+
+	/**
+	 * Static factory method to create and configure the AuthModule asynchronously.
+	 * @param options - Async configuration options for the module
+	 */
+	static forRootAsync(options: AuthModuleAsyncOptions): {
+		global: boolean;
+		module: typeof AuthModule;
+		imports?: ModuleMetadata["imports"];
+		providers: Provider[];
+		exports: (Provider | typeof AuthService)[];
+	} {
+		const asyncProviders = AuthModule.createAsyncProviders(options);
+
+		return {
+			global: true,
+			module: AuthModule,
+			imports: options.imports || [],
+			providers: [...asyncProviders, AuthService],
+			exports: [
+				{
+					provide: AUTH_INSTANCE_KEY,
+					useExisting: AUTH_INSTANCE_KEY,
+				},
+				{
+					provide: AUTH_MODULE_OPTIONS_KEY,
+					useExisting: AUTH_MODULE_OPTIONS_KEY,
+				},
+				AuthService,
+			],
+		};
+	}
+
+	private static createAsyncProviders(
+		options: AuthModuleAsyncOptions,
+	): Provider[] {
+		if (options.useFactory) {
+			return [
+				{
+					provide: AUTH_INSTANCE_KEY,
+					useFactory: async (...args: unknown[]) => {
+						const result = await options.useFactory?.(...args);
+						const auth = result.auth;
+
+						// Initialize hooks with an empty object if undefined
+						auth.options.hooks = {
+							...auth.options.hooks,
+						};
+
+						return auth;
+					},
+					inject: options.inject || [],
+				},
+				{
+					provide: AUTH_MODULE_OPTIONS_KEY,
+					useFactory: async (...args: unknown[]) => {
+						const result = await options.useFactory?.(...args);
+						return result.options || {};
+					},
+					inject: options.inject || [],
+				},
+				AuthModule.createExceptionFilterProvider(),
+			];
+		}
+
+		if (options.useClass) {
+			return [
+				{
+					provide: options.useClass,
+					useClass: options.useClass,
+				},
+				{
+					provide: AUTH_INSTANCE_KEY,
+					useFactory: async (configService: {
+						createAuthOptions():
+							| Promise<{
+									// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+									auth: any;
+									options?: AuthModuleOptions;
+							  }>
+							| {
+									// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+									auth: any;
+									options?: AuthModuleOptions;
+							  };
+					}) => {
+						const result = await configService.createAuthOptions();
+						const auth = result.auth;
+
+						// Initialize hooks with an empty object if undefined
+						auth.options.hooks = {
+							...auth.options.hooks,
+						};
+
+						return auth;
+					},
+					inject: [options.useClass],
+				},
+				{
+					provide: AUTH_MODULE_OPTIONS_KEY,
+					useFactory: async (configService: {
+						createAuthOptions():
+							| Promise<{
+									// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+									auth: any;
+									options?: AuthModuleOptions;
+							  }>
+							| {
+									// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+									auth: any;
+									options?: AuthModuleOptions;
+							  };
+					}) => {
+						const result = await configService.createAuthOptions();
+						return result.options || {};
+					},
+					inject: [options.useClass],
+				},
+				AuthModule.createExceptionFilterProvider(),
+			];
+		}
+
+		if (options.useExisting) {
+			return [
+				{
+					provide: AUTH_INSTANCE_KEY,
+					useFactory: async (configService: {
+						createAuthOptions():
+							| Promise<{
+									// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+									auth: any;
+									options?: AuthModuleOptions;
+							  }>
+							| {
+									// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+									auth: any;
+									options?: AuthModuleOptions;
+							  };
+					}) => {
+						const result = await configService.createAuthOptions();
+						const auth = result.auth;
+
+						// Initialize hooks with an empty object if undefined
+						auth.options.hooks = {
+							...auth.options.hooks,
+						};
+
+						return auth;
+					},
+					inject: [options.useExisting],
+				},
+				{
+					provide: AUTH_MODULE_OPTIONS_KEY,
+					useFactory: async (configService: {
+						createAuthOptions():
+							| Promise<{
+									// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+									auth: any;
+									options?: AuthModuleOptions;
+							  }>
+							| {
+									// biome-ignore lint/suspicious/noExplicitAny: TODO replace with auth type
+									auth: any;
+									options?: AuthModuleOptions;
+							  };
+					}) => {
+						const result = await configService.createAuthOptions();
+						return result.options || {};
+					},
+					inject: [options.useExisting],
+				},
+				AuthModule.createExceptionFilterProvider(),
+			];
+		}
+
+		throw new Error(
+			"Invalid async configuration. Must provide useFactory, useClass, or useExisting.",
+		);
+	}
+
+	private static createExceptionFilterProvider(): Provider {
+		return {
+			provide: APP_FILTER,
+			useFactory: (options: AuthModuleOptions) => {
+				return options.disableExceptionFilter
+					? null
+					: new APIErrorExceptionFilter();
+			},
+			inject: [AUTH_MODULE_OPTIONS_KEY],
 		};
 	}
 }
