@@ -4,43 +4,39 @@ import type {
 	MiddlewareConsumer,
 	NestModule,
 	OnModuleInit,
-	Provider,
 } from "@nestjs/common";
 import {
-	APP_FILTER,
 	DiscoveryModule,
 	DiscoveryService,
 	HttpAdapterHost,
 	MetadataScanner,
 } from "@nestjs/core";
-import type { Auth } from "better-auth";
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/plugins";
 import type { Request, Response } from "express";
-import { APIErrorExceptionFilter } from "./api-error-exception-filter.ts";
+import {
+	type ASYNC_OPTIONS_TYPE,
+	type AuthModuleOptions,
+	ConfigurableModuleClass,
+	MODULE_OPTIONS_TOKEN,
+	type OPTIONS_TYPE,
+} from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
 import { SkipBodyParsingMiddleware } from "./middlewares.ts";
 import {
 	AFTER_HOOK_KEY,
 	AUTH_INSTANCE_KEY,
-	AUTH_MODULE_OPTIONS_KEY,
 	BEFORE_HOOK_KEY,
 	HOOK_KEY,
 } from "./symbols.ts";
-
-/**
- * Configuration options for the AuthModule
- */
-type AuthModuleOptions = {
-	disableExceptionFilter?: boolean;
-	disableTrustedOriginsCors?: boolean;
-	disableBodyParser?: boolean;
-};
 
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
 	{ metadataKey: AFTER_HOOK_KEY, hookType: "after" as const },
 ];
+
+// biome-ignore lint/suspicious/noExplicitAny: external auth instance can vary with plugins
+type Auth = any;
 
 /**
  * NestJS module that integrates the Auth library with NestJS applications.
@@ -48,8 +44,13 @@ const HOOKS = [
  */
 @Module({
 	imports: [DiscoveryModule],
+	providers: [AuthService],
+	exports: [AuthService],
 })
-export class AuthModule implements NestModule, OnModuleInit {
+export class AuthModule
+	extends ConfigurableModuleClass
+	implements NestModule, OnModuleInit
+{
 	private readonly logger = new Logger(AuthModule.name);
 	constructor(
 		@Inject(AUTH_INSTANCE_KEY) private readonly auth: Auth,
@@ -59,13 +60,17 @@ export class AuthModule implements NestModule, OnModuleInit {
 		private readonly metadataScanner: MetadataScanner,
 		@Inject(HttpAdapterHost)
 		private readonly adapter: HttpAdapterHost,
-		@Inject(AUTH_MODULE_OPTIONS_KEY)
+		@Inject(MODULE_OPTIONS_TOKEN)
 		private readonly options: AuthModuleOptions,
-	) {}
+	) {
+		super();
+	}
 
 	onModuleInit(): void {
-		// Setup hooks
-		if (!this.auth.options.hooks) return;
+		// Ensure hooks object exists so we can extend/override it safely
+		this.auth.options.hooks = {
+			...this.auth.options.hooks,
+		} as NonNullable<typeof this.auth.options.hooks>;
 
 		const providers = this.discoveryService
 			.getProviders()
@@ -155,57 +160,15 @@ export class AuthModule implements NestModule, OnModuleInit {
 		}
 	}
 
-	/**
-	 * Static factory method to create and configure the AuthModule.
-	 * @param auth - The Auth instance to use
-	 * @param options - Configuration options for the module
-	 */
-	static forRoot(
-		// biome-ignore lint/suspicious/noExplicitAny: i still need to find a type for the auth instance
-		auth: any,
-		options: AuthModuleOptions = {},
-	): DynamicModule {
-		// Initialize hooks with an empty object if undefined
-		// Without this initialization, the setupHook method won't be able to properly override hooks
-		// It won't throw an error, but any hook functions we try to add won't be called
-		auth.options.hooks = {
-			...auth.options.hooks,
-		};
-
-		const providers: Provider[] = [
-			{
-				provide: AUTH_INSTANCE_KEY,
-				useValue: auth,
-			},
-			{
-				provide: AUTH_MODULE_OPTIONS_KEY,
-				useValue: options,
-			},
-			AuthService,
-		];
-
-		if (!options.disableExceptionFilter) {
-			providers.push({
-				provide: APP_FILTER,
-				useClass: APIErrorExceptionFilter,
-			});
-		}
-
+	static forRootAsync(options: typeof ASYNC_OPTIONS_TYPE): DynamicModule {
 		return {
-			global: true,
-			module: AuthModule,
-			providers: providers,
-			exports: [
-				{
-					provide: AUTH_INSTANCE_KEY,
-					useValue: auth,
-				},
-				{
-					provide: AUTH_MODULE_OPTIONS_KEY,
-					useValue: options,
-				},
-				AuthService,
-			],
+			...super.forRootAsync(options),
+		};
+	}
+
+	static forRoot(options: typeof OPTIONS_TYPE): DynamicModule {
+		return {
+			...super.forRoot(options),
 		};
 	}
 }
