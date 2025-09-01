@@ -4,43 +4,35 @@ import type {
 	MiddlewareConsumer,
 	NestModule,
 	OnModuleInit,
-	Provider,
 } from "@nestjs/common";
 import {
-	APP_FILTER,
 	DiscoveryModule,
 	DiscoveryService,
 	HttpAdapterHost,
 	MetadataScanner,
 } from "@nestjs/core";
-import type { Auth } from "better-auth";
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/plugins";
 import type { Request, Response } from "express";
-import { APIErrorExceptionFilter } from "./api-error-exception-filter.ts";
+import {
+	type ASYNC_OPTIONS_TYPE,
+	type AuthModuleOptions,
+	ConfigurableModuleClass,
+	MODULE_OPTIONS_TOKEN,
+	type OPTIONS_TYPE,
+} from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
 import { SkipBodyParsingMiddleware } from "./middlewares.ts";
-import {
-	AFTER_HOOK_KEY,
-	AUTH_INSTANCE_KEY,
-	AUTH_MODULE_OPTIONS_KEY,
-	BEFORE_HOOK_KEY,
-	HOOK_KEY,
-} from "./symbols.ts";
-
-/**
- * Configuration options for the AuthModule
- */
-type AuthModuleOptions = {
-	disableExceptionFilter?: boolean;
-	disableTrustedOriginsCors?: boolean;
-	disableBodyParser?: boolean;
-};
+import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
+import { APIError } from "better-auth/api";
 
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
 	{ metadataKey: AFTER_HOOK_KEY, hookType: "after" as const },
 ];
+
+// biome-ignore lint/suspicious/noExplicitAny: i don't want to cause issues/breaking changes between different ways of setting up better-auth and even versions
+export type Auth = any;
 
 /**
  * NestJS module that integrates the Auth library with NestJS applications.
@@ -48,24 +40,33 @@ const HOOKS = [
  */
 @Module({
 	imports: [DiscoveryModule],
+	providers: [AuthService],
+	exports: [AuthService],
 })
-export class AuthModule implements NestModule, OnModuleInit {
+export class AuthModule
+	extends ConfigurableModuleClass
+	implements NestModule, OnModuleInit
+{
 	private readonly logger = new Logger(AuthModule.name);
 	constructor(
-		@Inject(AUTH_INSTANCE_KEY) private readonly auth: Auth,
 		@Inject(DiscoveryService)
 		private readonly discoveryService: DiscoveryService,
 		@Inject(MetadataScanner)
 		private readonly metadataScanner: MetadataScanner,
 		@Inject(HttpAdapterHost)
 		private readonly adapter: HttpAdapterHost,
-		@Inject(AUTH_MODULE_OPTIONS_KEY)
+		@Inject(MODULE_OPTIONS_TOKEN)
 		private readonly options: AuthModuleOptions,
-	) {}
+	) {
+		super();
+	}
 
 	onModuleInit(): void {
-		// Setup hooks
-		if (!this.auth.options.hooks) return;
+		if (!this.options.auth.options.hooks) return;
+
+		this.options.auth.options.hooks = {
+			...this.options.auth.options.hooks,
+		};
 
 		const providers = this.discoveryService
 			.getProviders()
@@ -85,7 +86,7 @@ export class AuthModule implements NestModule, OnModuleInit {
 	}
 
 	configure(consumer: MiddlewareConsumer): void {
-		const trustedOrigins = this.auth.options.trustedOrigins;
+		const trustedOrigins = this.options.auth.options.trustedOrigins;
 		// function-based trustedOrigins requires a Request (from web-apis) object to evaluate, which is not available in NestJS (we only have a express Request object)
 		// if we ever need this, take a look at better-call which show an implementation for this
 		const isNotFunctionBased = trustedOrigins && Array.isArray(trustedOrigins);
@@ -109,7 +110,7 @@ export class AuthModule implements NestModule, OnModuleInit {
 			consumer.apply(SkipBodyParsingMiddleware).forRoutes("*path");
 
 		// Get basePath from options or use default
-		let basePath = this.auth.options.basePath ?? "/api/auth";
+		let basePath = this.options.auth.options.basePath ?? "/api/auth";
 
 		// Ensure basePath starts with /
 		if (!basePath.startsWith("/")) {
@@ -121,13 +122,25 @@ export class AuthModule implements NestModule, OnModuleInit {
 			basePath = basePath.slice(0, -1);
 		}
 
-		const handler = toNodeHandler(this.auth);
+		const handler = toNodeHandler(this.options.auth);
 		this.adapter.httpAdapter
 			.getInstance()
 			// little hack to ignore any global prefix
 			// for now i'll just not support a global prefix
-			.use(`${basePath}/*path`, (req: Request, res: Response) => {
-				return handler(req, res);
+			.use(`${basePath}/*path`, async (req: Request, res: Response) => {
+				return await handler(req, res).catch((err) => {
+					// for whatever reason, nestjs' built-in exception filters are not working so I'll go with this for now
+					if (this.options.disableExceptionFilter) throw err;
+
+					if (err instanceof APIError) {
+						return res.status(err.statusCode).json({
+							statusCode: err.statusCode,
+							message: err.message,
+						});
+					}
+
+					throw err;
+				});
 			});
 		this.logger.log(`AuthModule initialized BetterAuth on '${basePath}/*'`);
 	}
@@ -136,76 +149,52 @@ export class AuthModule implements NestModule, OnModuleInit {
 		providerMethod: (...args: unknown[]) => unknown,
 		providerClass: { new (...args: unknown[]): unknown },
 	) {
-		if (!this.auth.options.hooks) return;
+		if (!this.options.auth.options.hooks) return;
 
 		for (const { metadataKey, hookType } of HOOKS) {
 			const hookPath = Reflect.getMetadata(metadataKey, providerMethod);
 			if (!hookPath) continue;
 
-			const originalHook = this.auth.options.hooks[hookType];
-			this.auth.options.hooks[hookType] = createAuthMiddleware(async (ctx) => {
-				if (originalHook) {
-					await originalHook(ctx);
-				}
+			const originalHook = this.options.auth.options.hooks[hookType];
+			this.options.auth.options.hooks[hookType] = createAuthMiddleware(
+				async (ctx) => {
+					if (originalHook) {
+						await originalHook(ctx);
+					}
 
-				if (hookPath === ctx.path) {
-					await providerMethod.apply(providerClass, [ctx]);
-				}
-			});
+					if (hookPath === ctx.path) {
+						await providerMethod.apply(providerClass, [ctx]);
+					}
+				},
+			);
 		}
 	}
 
+	static forRootAsync(options: typeof ASYNC_OPTIONS_TYPE): DynamicModule {
+		return {
+			...super.forRootAsync(options),
+		};
+	}
+
+	static forRoot(options: typeof OPTIONS_TYPE): DynamicModule;
 	/**
-	 * Static factory method to create and configure the AuthModule.
-	 * @param auth - The Auth instance to use
-	 * @param options - Configuration options for the module
+	 * @deprecated Use the object-based signature: AuthModule.forRoot({ auth, ...options })
 	 */
 	static forRoot(
-		// biome-ignore lint/suspicious/noExplicitAny: i still need to find a type for the auth instance
-		auth: any,
-		options: AuthModuleOptions = {},
+		auth: Auth,
+		options?: Omit<typeof OPTIONS_TYPE, "auth">,
+	): DynamicModule;
+	static forRoot(
+		arg1: Auth | typeof OPTIONS_TYPE,
+		arg2?: Omit<typeof OPTIONS_TYPE, "auth">,
 	): DynamicModule {
-		// Initialize hooks with an empty object if undefined
-		// Without this initialization, the setupHook method won't be able to properly override hooks
-		// It won't throw an error, but any hook functions we try to add won't be called
-		auth.options.hooks = {
-			...auth.options.hooks,
-		};
-
-		const providers: Provider[] = [
-			{
-				provide: AUTH_INSTANCE_KEY,
-				useValue: auth,
-			},
-			{
-				provide: AUTH_MODULE_OPTIONS_KEY,
-				useValue: options,
-			},
-			AuthService,
-		];
-
-		if (!options.disableExceptionFilter) {
-			providers.push({
-				provide: APP_FILTER,
-				useClass: APIErrorExceptionFilter,
-			});
-		}
+		const normalizedOptions: typeof OPTIONS_TYPE =
+			typeof arg1 === "object" && arg1 !== null && "auth" in (arg1 as object)
+				? (arg1 as typeof OPTIONS_TYPE)
+				: ({ ...(arg2 ?? {}), auth: arg1 as Auth } as typeof OPTIONS_TYPE);
 
 		return {
-			global: true,
-			module: AuthModule,
-			providers: providers,
-			exports: [
-				{
-					provide: AUTH_INSTANCE_KEY,
-					useValue: auth,
-				},
-				{
-					provide: AUTH_MODULE_OPTIONS_KEY,
-					useValue: options,
-				},
-				AuthService,
-			],
+			...super.forRoot(normalizedOptions),
 		};
 	}
 }

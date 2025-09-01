@@ -1,10 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { CanActivate, ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import type { Auth } from "better-auth";
 import { APIError, type getSession } from "better-auth/api";
 import { fromNodeHeaders } from "better-auth/node";
-import { AUTH_INSTANCE_KEY } from "./symbols.ts";
+import {
+	type AuthModuleOptions,
+	MODULE_OPTIONS_TOKEN,
+} from "./auth-module-definition.ts";
 
 /**
  * Type representing a valid user session after authentication
@@ -23,8 +25,8 @@ export class AuthGuard implements CanActivate {
 	constructor(
 		@Inject(Reflector)
 		private readonly reflector: Reflector,
-		@Inject(AUTH_INSTANCE_KEY)
-		private readonly auth: Auth,
+		@Inject(MODULE_OPTIONS_TOKEN)
+		private readonly options: AuthModuleOptions,
 	) {}
 
 	/**
@@ -35,7 +37,7 @@ export class AuthGuard implements CanActivate {
 	 */
 	async canActivate(context: ExecutionContext): Promise<boolean> {
 		const request = context.switchToHttp().getRequest();
-		const session = await this.auth.api.getSession({
+		const session = await this.options.auth.api.getSession({
 			headers: fromNodeHeaders(request.headers),
 		});
 
