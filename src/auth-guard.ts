@@ -13,9 +13,15 @@ import { getRequestFromContext } from "./utils.ts";
  * Type representing a valid user session after authentication
  * Excludes null and undefined values from the session return type
  */
-export type UserSession = NonNullable<
-	Awaited<ReturnType<ReturnType<typeof getSession>>>
+export type BaseUserSession = NonNullable<
+    Awaited<ReturnType<ReturnType<typeof getSession>>>
 >;
+
+export type UserSession = BaseUserSession & {
+    user: BaseUserSession["user"] & {
+        role?: string | string[];
+    };
+};
 
 /**
  * NestJS guard that handles authentication for protected routes
@@ -39,7 +45,7 @@ export class AuthGuard implements CanActivate {
 	 */
 	async canActivate(context: ExecutionContext): Promise<boolean> {
 		const request = getRequestFromContext(context);
-		const session = await this.options.auth.api.getSession({
+		const session: UserSession | null = await this.options.auth.api.getSession({
 			headers: fromNodeHeaders(
 				request.headers || request?.handshake?.headers || [],
 			),
@@ -67,6 +73,28 @@ export class AuthGuard implements CanActivate {
 				code: "UNAUTHORIZED",
 				message: "Unauthorized",
 			});
+
+        const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
+            context.getHandler(),
+            context.getClass(),
+        ]);
+
+        if (requiredRoles && requiredRoles.length > 0) {
+            const userRole = session.user.role;
+            let hasRole = false;
+            if (Array.isArray(userRole)) {
+                hasRole = userRole.some(role => requiredRoles.includes(role));
+            } else if (typeof userRole === 'string') {
+                hasRole = requiredRoles.includes(userRole);
+            }
+
+            if (!hasRole) {
+                throw new APIError(403, {
+                    code: "FORBIDDEN",
+                    message: "Forbidden: insufficient permissions",
+                });
+            }
+        }
 
 		return true;
 	}

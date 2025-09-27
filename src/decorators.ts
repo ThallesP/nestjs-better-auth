@@ -20,6 +20,15 @@ export const Optional = (): CustomDecorator<string> =>
 	SetMetadata("OPTIONAL", true);
 
 /**
+ * Specifies the roles required to access a route or controller.
+ * The AuthGuard will check if the authenticated user's roles
+ * include at least one of the specified roles.
+ * @param roles - The roles required for access
+ */
+export const Roles = (roles: string[]): CustomDecorator =>
+    SetMetadata("ROLES", roles);
+
+/**
  * Parameter decorator that extracts the user session from the request.
  * Provides easy access to the authenticated user's session data in controller methods.
  * Works with both HTTP and GraphQL execution contexts.

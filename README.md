@@ -185,6 +185,18 @@ export class UserController {
   async optionalRoute(@Session() session: UserSession) {
     return { authenticated: !!session, session };
   }
+
+  @Get('admin')
+  @Roles(['admin']) // Only authenticated users with the 'admin' role can access this route
+  adminRoute() {
+    return 'Only admins can see this';
+  }
+
+  @Get('admin-moderator')
+  @Roles(['admin', 'moderator']) // Only authenticated users with 'admin' or 'moderator' roles can access this route
+  moderatorRoute() {
+    return 'Only admins and moderators can see this';
+  }
 }
 ```
 
@@ -201,6 +213,10 @@ export class PublicController { /* */ }
 @Optional() // Authentication is optional for all routes inside this controller
 @Controller('optional')
 export class OptionalController { /* */ }
+
+@Roles(['admin']) // All routes inside this controller require 'admin' role
+@Controller('admin')
+export class AdminController { /* */ }
 ```
 
 ### Hook Decorators
