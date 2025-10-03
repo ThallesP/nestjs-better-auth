@@ -65,10 +65,6 @@ export class AuthModule
 	onModuleInit(): void {
 		if (!this.options.auth.options.hooks) return;
 
-		this.options.auth.options.hooks = {
-			...this.options.auth.options.hooks,
-		};
-
 		const providers = this.discoveryService
 			.getProviders()
 			.filter(
@@ -138,8 +134,6 @@ export class AuthModule
 		providerMethod: (...args: unknown[]) => unknown,
 		providerClass: { new (...args: unknown[]): unknown },
 	) {
-		if (!this.options.auth.options.hooks) return;
-
 		for (const { metadataKey, hookType } of HOOKS) {
 			const hasHook = Reflect.hasMetadata(metadataKey, providerMethod);
 			if (!hasHook) continue;
