@@ -8,29 +8,12 @@ import type { Request } from "express";
  * @returns The request object
  */
 export function getRequestFromContext(context: ExecutionContext): Request {
-	const contextType = context.getType<GqlContextType>();
-	return handleContexts(contextType, context);
-}
-
-function handleContexts(
-	type: GqlContextType,
-	context: ExecutionContext,
-): Request {
-	let request = context.switchToHttp().getRequest<Request>();
-	switch (type) {
-		case "graphql":
-			request = GqlExecutionContext.create(context).getContext<{
-				req: Request;
-			}>().req;
-			break;
-		case "http":
-			request = context.switchToHttp().getRequest<Request>();
-			break;
-		case "ws":
-		case "rpc":
-			throw new Error(
-				`Context type '${type}' is not supported. Only 'http' and 'graphql' contexts are supported.`,
-			);
-	}
-	return request;
+  const contextType = context.getType<GqlContextType>();
+  if (contextType === "graphql") {
+    const { req } = GqlExecutionContext.create(context).getContext<{
+      req: Request;
+    }>();
+    return req;
+  }
+  return context.switchToHttp().getRequest<Request>();
 }
