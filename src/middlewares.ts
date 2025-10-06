@@ -1,6 +1,6 @@
 import { Injectable, type NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
-import * as express from "express";
+import express from "express";
 
 @Injectable()
 export class SkipBodyParsingMiddleware implements NestMiddleware {

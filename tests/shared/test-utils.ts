@@ -6,6 +6,7 @@ import { ApolloDriver, type ApolloDriverConfig } from "@nestjs/apollo";
 import type { Request, Response } from "express";
 import { ExpressAdapter } from "@nestjs/platform-express";
 import { bearer } from "better-auth/plugins/bearer";
+import { faker } from "@faker-js/faker";
 import { AuthModule } from "../../src/index.ts";
 import { betterAuth } from "better-auth";
 import { TestController } from "./test-controller.ts";
@@ -20,6 +21,24 @@ export function createTestAuth() {
 		},
 		plugins: [bearer()],
 	});
+}
+
+// Helper to generate test user data
+export function generateTestUser() {
+	return {
+		name: faker.person.fullName(),
+		email: faker.internet.email(),
+		password: faker.internet.password({ length: 10 }),
+	};
+}
+
+// Helper to sign up a test user
+export async function signUpTestUser(auth: ReturnType<typeof createTestAuth>) {
+	const userData = generateTestUser();
+	const signUp = await auth.api.signUpEmail({
+		body: userData,
+	});
+	return { ...signUp, credentials: userData };
 }
 
 // Test app module factory
