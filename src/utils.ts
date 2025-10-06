@@ -8,12 +8,12 @@ import type { Request } from "express";
  * @returns The request object
  */
 export function getRequestFromContext(context: ExecutionContext): Request {
-  const contextType = context.getType<GqlContextType>();
-  if (contextType === "graphql") {
-    const { req } = GqlExecutionContext.create(context).getContext<{
-      req: Request;
-    }>();
-    return req;
-  }
-  return context.switchToHttp().getRequest<Request>();
+	const contextType = context.getType<GqlContextType>();
+	if (contextType === "graphql") {
+		const { req } = GqlExecutionContext.create(context).getContext<{
+			req: Request;
+		}>();
+		return req;
+	}
+	return context.switchToHttp().getRequest<Request>();
 }
