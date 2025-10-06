@@ -1,24 +1,35 @@
-import { Controller, Get, Request } from "@nestjs/common";
-import { OptionalAuth, AllowAnonymous } from "../../src/decorators.ts";
+import { Controller, Get } from "@nestjs/common";
+import { OptionalAuth, AllowAnonymous, Session } from "../../src/decorators.ts";
 import type { UserSession } from "../../src/auth-guard.ts";
 
-// Simple controller with one protected route and one public route
+/**
+ * Test controller for REST API authentication flows
+ */
 @Controller("test")
 export class TestController {
+	/**
+	 * Protected route - requires authentication
+	 */
 	@Get("protected")
-	protected(@Request() req: { user?: unknown }) {
-		return { user: req.user };
+	protected(@Session() session: UserSession) {
+		return { user: session?.user };
 	}
 
+	/**
+	 * Public route - accessible without authentication
+	 */
 	@AllowAnonymous()
 	@Get("public")
 	public() {
 		return { ok: true };
 	}
 
+	/**
+	 * Optional authentication route - works with or without auth
+	 */
 	@OptionalAuth()
 	@Get("optional")
-	optional(@Request() req: UserSession) {
-		return { authenticated: !!req.user, session: req.session };
+	optional(@Session() session: UserSession) {
+		return { authenticated: !!session?.user, session };
 	}
 }

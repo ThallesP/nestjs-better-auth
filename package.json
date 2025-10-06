@@ -32,11 +32,12 @@
 		"dist"
 	],
 	"devDependencies": {
-		"@apollo/server": "^4.12.2",
-		"@biomejs/biome": "2.2.4",
+		"@apollo/server": "^5.0.0",
+		"@as-integrations/express5": "^1.1.2",
+		"@biomejs/biome": "2.2.5",
 		"@faker-js/faker": "^10.0.0",
-		"@nestjs/apollo": "^13.1.0",
-		"@nestjs/graphql": "^13.1.0",
+		"@nestjs/apollo": "^13.2.1",
+		"@nestjs/graphql": "^13.2.0",
 		"@nestjs/platform-express": "^11.1.6",
 		"@nestjs/testing": "^11.1.6",
 		"@swc/cli": "^0.7.8",
@@ -50,8 +51,8 @@
 		"reflect-metadata": "^0.2.2",
 		"supertest": "^7.1.4",
 		"unbuild": "^3.6.1",
-		"vitest": "^3.2.4",
-		"unplugin-swc": "^1.5.7"
+		"unplugin-swc": "^1.5.7",
+		"vitest": "^3.2.4"
 	},
 	"peerDependencies": {
 		"@nestjs/common": "^11.1.6",
