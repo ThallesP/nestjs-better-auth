@@ -9,7 +9,7 @@ import { Reflector } from "@nestjs/core";
 import type { getSession } from "better-auth/api";
 import { fromNodeHeaders } from "better-auth/node";
 import {
-	AuthModuleOptions,
+	type AuthModuleOptions,
 	MODULE_OPTIONS_TOKEN,
 } from "./auth-module-definition.ts";
 import { getRequestFromContext } from "./utils.ts";
