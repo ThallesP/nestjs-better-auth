@@ -4,7 +4,11 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
-import type { CanActivate, ExecutionContext } from "@nestjs/common";
+import type {
+	CanActivate,
+	ContextType,
+	ExecutionContext,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { getSession } from "better-auth/api";
 import { fromNodeHeaders } from "better-auth/node";
@@ -23,27 +27,45 @@ export type BaseUserSession = NonNullable<
 >;
 
 export type UserSession = BaseUserSession & {
-  user: BaseUserSession["user"] & {
-    role?: string | string[];
-    [key: string]: any; // Allow custom fields from Better Auth plugins
-  };
-  [key: string]: any; // Allow custom session fields
+	user: BaseUserSession["user"] & {
+		role?: string | string[];
+	};
 };
 
-// Extend the request type to include session and user
-declare module "express" {
-  interface Request {
-    session?: UserSession | null;
-    user?: UserSession["user"] | null;
-  }
-}
+const AuthErrorType = {
+	UNAUTHORIZED: "UNAUTHORIZED",
+	FORBIDDEN: "FORBIDDEN",
+} as const;
 
-declare module "fastify" {
-  interface FastifyRequest {
-    session?: UserSession | null;
-    user?: UserSession["user"] | null;
-  }
-}
+const AuthContextErrorMap: Record<
+	ContextType,
+	Record<keyof typeof AuthErrorType, (args?: unknown) => Error>
+> = {
+	http: {
+		UNAUTHORIZED: (args) =>
+			new UnauthorizedException(
+				args ?? {
+					code: "UNAUTHORIZED",
+					message: "Unauthorized",
+				},
+			),
+		FORBIDDEN: (args) =>
+			new ForbiddenException(
+				args ?? {
+					code: "FORBIDDEN",
+					message: "Insufficient permissions",
+				},
+			),
+	},
+	ws: {
+		UNAUTHORIZED: (args) => new WsException(args ?? "UNAUTHORIZED"),
+		FORBIDDEN: (args) => new WsException(args ?? "FORBIDDEN"),
+	},
+	rpc: {
+		UNAUTHORIZED: () => new Error("UNAUTHORIZED"),
+		FORBIDDEN: () => new Error("FORBIDDEN"),
+	},
+};
 
 /**
  * NestJS guard that handles authentication for protected routes
@@ -93,19 +115,7 @@ export class AuthGuard implements CanActivate {
 
 		const ctxType = context.getType();
 
-		if (!session) {
-			if (ctxType === "http") {
-				throw new UnauthorizedException({
-					code: "UNAUTHORIZED",
-					message: "Unauthorized",
-				});
-			} else if (ctxType === "ws") {
-				throw new WsException("UNAUTHORIZED");
-			} else {
-				// TODO: Properly handle other types like "rpc"
-				throw new Error("UNAUTHORIZED");
-			}
-		}
+		if (!session) throw AuthContextErrorMap[ctxType].UNAUTHORIZED();
 
     const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
       context.getHandler(),
@@ -121,19 +131,7 @@ export class AuthGuard implements CanActivate {
         hasRole = requiredRoles.includes(userRole);
       }
 
-			if (!hasRole) {
-				if (ctxType === "http") {
-					throw new ForbiddenException({
-						code: "FORBIDDEN",
-						message: "Insufficient permissions",
-					});
-				} else if (ctxType === "ws") {
-					throw new WsException("FORBIDDEN");
-				} else {
-					// TODO: Properly handle other types like "rpc"
-					throw new Error("FORBIDDEN");
-				}
-			}
+			if (!hasRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
 		}
 
     return true;
