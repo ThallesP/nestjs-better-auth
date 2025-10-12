@@ -13,6 +13,7 @@ import {
 	MODULE_OPTIONS_TOKEN,
 } from "./auth-module-definition.ts";
 import { getRequestFromContext } from "./utils.ts";
+import { WsException } from "@nestjs/websockets";
 
 /**
  * Type representing a valid user session after authentication
@@ -44,7 +45,7 @@ export class AuthGuard implements CanActivate {
 	/**
 	 * Validates if the current request is authenticated
 	 * Attaches session and user information to the request object
-	 * Supports both HTTP and GraphQL execution contexts
+	 * Supports HTTP, GraphQL and WebSocket execution contexts
 	 * @param context - The execution context of the current request
 	 * @returns True if the request is authorized to proceed, throws an error otherwise
 	 */
@@ -73,11 +74,21 @@ export class AuthGuard implements CanActivate {
 
 		if (isOptional && !session) return true;
 
-		if (!session)
-			throw new UnauthorizedException({
-				code: "UNAUTHORIZED",
-				message: "Unauthorized",
-			});
+		const ctxType = context.getType();
+
+		if (!session) {
+			if (ctxType === "http") {
+				throw new UnauthorizedException({
+					code: "UNAUTHORIZED",
+					message: "Unauthorized",
+				});
+			} else if (ctxType === "ws") {
+				throw new WsException("UNAUTHORIZED");
+			} else {
+				// TODO: Properly handle other types like "rpc"
+				throw new Error("UNAUTHORIZED");
+			}
+		}
 
 		const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
 			context.getHandler(),
@@ -94,10 +105,17 @@ export class AuthGuard implements CanActivate {
 			}
 
 			if (!hasRole) {
-				throw new ForbiddenException({
-					code: "FORBIDDEN",
-					message: "Insufficient permissions",
-				});
+				if (ctxType === "http") {
+					throw new ForbiddenException({
+						code: "FORBIDDEN",
+						message: "Insufficient permissions",
+					});
+				} else if (ctxType === "ws") {
+					throw new WsException("FORBIDDEN");
+				} else {
+					// TODO: Properly handle other types like "rpc"
+					throw new Error("FORBIDDEN");
+				}
 			}
 		}
 
