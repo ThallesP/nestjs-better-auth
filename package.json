@@ -64,6 +64,7 @@
 		"graphql": "^16.11.0",
 		"typescript": "^5.9.2",
 		"@fastify/multipart": "^9.2.1",
-		"fastify": "^5.6.1"
+		"fastify": "^5.6.1",
+		"@nestjs/websockets": "^11.1.6"
 	}
 }

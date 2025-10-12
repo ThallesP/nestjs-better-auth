@@ -157,8 +157,14 @@ declare class AuthGuard implements CanActivate {
     private readonly reflector;
     private readonly options;
     constructor(reflector: Reflector, options: AuthModuleOptions);
+    /**
+     * Validates if the current request is authenticated
+     * Attaches session and user information to the request object
+     * Supports HTTP, GraphQL and WebSocket execution contexts
+     * @param context - The execution context of the current request
+     * @returns True if the request is authorized to proceed, throws an error otherwise
+     */
     canActivate(context: ExecutionContext): Promise<boolean>;
-    private getHeadersFromRequest;
 }
 
 declare const BEFORE_HOOK_KEY: symbol;

@@ -4,6 +4,7 @@ const common = require('@nestjs/common');
 const graphql = require('@nestjs/graphql');
 const core = require('@nestjs/core');
 const node = require('better-auth/node');
+const websockets = require('@nestjs/websockets');
 const plugins = require('better-auth/plugins');
 const fastifyMultipart = require('@fastify/multipart');
 
@@ -20,6 +21,9 @@ function getRequestFromContext(context) {
   const contextType = context.getType();
   if (contextType === "graphql") {
     return graphql.GqlExecutionContext.create(context).getContext().req;
+  }
+  if (contextType === "ws") {
+    return context.switchToWs().getClient();
   }
   return context.switchToHttp().getRequest();
 }
@@ -107,11 +111,19 @@ exports.AuthGuard = class AuthGuard {
     this.reflector = reflector;
     this.options = options;
   }
+  /**
+   * Validates if the current request is authenticated
+   * Attaches session and user information to the request object
+   * Supports HTTP, GraphQL and WebSocket execution contexts
+   * @param context - The execution context of the current request
+   * @returns True if the request is authorized to proceed, throws an error otherwise
+   */
   async canActivate(context) {
     const request = getRequestFromContext(context);
-    const headers = this.getHeadersFromRequest(request);
     const session = await this.options.auth.api.getSession({
-      headers: node.fromNodeHeaders(headers)
+      headers: node.fromNodeHeaders(
+        request.headers || request?.handshake?.headers || []
+      )
     });
     request.session = session;
     request.user = session?.user ?? null;
@@ -125,11 +137,19 @@ exports.AuthGuard = class AuthGuard {
       context.getClass()
     ]);
     if (isOptional && !session) return true;
-    if (!session)
-      throw new common.UnauthorizedException({
-        code: "UNAUTHORIZED",
-        message: "Unauthorized"
-      });
+    const ctxType = context.getType();
+    if (!session) {
+      if (ctxType === "http") {
+        throw new common.UnauthorizedException({
+          code: "UNAUTHORIZED",
+          message: "Unauthorized"
+        });
+      } else if (ctxType === "ws") {
+        throw new websockets.WsException("UNAUTHORIZED");
+      } else {
+        throw new Error("UNAUTHORIZED");
+      }
+    }
     const requiredRoles = this.reflector.getAllAndOverride("ROLES", [
       context.getHandler(),
       context.getClass()
@@ -143,19 +163,19 @@ exports.AuthGuard = class AuthGuard {
         hasRole = requiredRoles.includes(userRole);
       }
       if (!hasRole) {
-        throw new common.ForbiddenException({
-          code: "FORBIDDEN",
-          message: "Insufficient permissions"
-        });
+        if (ctxType === "http") {
+          throw new common.ForbiddenException({
+            code: "FORBIDDEN",
+            message: "Insufficient permissions"
+          });
+        } else if (ctxType === "ws") {
+          throw new websockets.WsException("FORBIDDEN");
+        } else {
+          throw new Error("FORBIDDEN");
+        }
       }
     }
     return true;
-  }
-  getHeadersFromRequest(req) {
-    if ("raw" in req && req.raw) {
-      return req.raw.headers || {};
-    }
-    return req.headers || {};
   }
 };
 exports.AuthGuard = __decorateClass$2([
