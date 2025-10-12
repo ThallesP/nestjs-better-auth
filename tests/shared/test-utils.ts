@@ -10,6 +10,7 @@ import { AuthModule } from "../../src/index.ts";
 import { betterAuth } from "better-auth";
 import { TestController } from "./test-controller.ts";
 import { TestResolver } from "./test-resolver.ts";
+import { TestGateway } from "./test-gateway.ts";
 import { admin } from "better-auth/plugins/admin";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
 
@@ -49,7 +50,7 @@ export function createTestAppModule(auth: ReturnType<typeof createTestAuth>) {
 			}),
 		],
 		controllers: [TestController],
-		providers: [TestResolver],
+		providers: [TestResolver, TestGateway],
 	})
 	class AppModule {}
 
