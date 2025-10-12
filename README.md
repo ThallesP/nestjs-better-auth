@@ -74,6 +74,26 @@ export class AppModule {}
 
 GraphQL is supported and works the same way as REST: the global guard applies to resolvers too, and you can use `@AllowAnonymous()`/`@OptionalAuth()` on queries and mutations.
 
+WebSocket is also supported and works in the same way as REST and GraphQL: you can use `@AllowAnonymous()`/`@OptionalAuth()` on any connections, but you must set the AuthGuard for all of them, either at the Gateway or Message level, like so:
+
+```ts
+import { SubscribeMessage, WebSocketGateway } from "@nestjs/websockets";
+import { UseGuards } from "@nestjs/common";
+import { AuthGuard } from '@thallesp/nestjs-better-auth';
+
+@WebSocketGateway({
+	path: "/ws",
+	namespace: "test",
+	cors: {
+		origin: "*",
+	},
+})
+@UseGuards(AuthGuard)
+export class TestGateway { /* ... */ }
+```
+
+Check the [test gateway](./tests/shared/test-gateway.ts) for a full example.
+
 ## Decorators
 
 Better Auth provides several decorators to enhance your authentication setup:
