@@ -1,4 +1,4 @@
-import { Inject } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import type { Auth } from "better-auth";
 import {
 	type AuthModuleOptions,
@@ -9,6 +9,7 @@ import {
  * NestJS service that provides access to the Better Auth instance
  * Use generics to support auth instances extended by plugins
  */
+@Injectable()
 export class AuthService<T extends { api: T["api"] } = Auth> {
 	constructor(
 		@Inject(MODULE_OPTIONS_TOKEN)

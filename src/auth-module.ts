@@ -22,10 +22,11 @@ import {
 	type OPTIONS_TYPE,
 } from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
-import { SkipBodyParsingMiddleware } from "./middlewares.ts";
+import { SkipBodyParsingMiddleware } from "./middlewares/skip-body-parsing.middleware.ts";
 import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
 import { AuthGuard } from "./auth-guard.ts";
 import { APP_GUARD } from "@nestjs/core";
+import { AppendSessionReqMiddleware } from "./middlewares/append-session-req.middleware.ts";
 
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
@@ -41,7 +42,7 @@ export type Auth = any;
  */
 @Module({
 	imports: [DiscoveryModule],
-	providers: [AuthService],
+	providers: [],
 	exports: [AuthService],
 })
 export class AuthModule
@@ -112,8 +113,11 @@ export class AuthModule
 				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
 			);
 
-		if (!this.options.disableBodyParser)
+		if (!this.options.disableBodyParser) {
 			consumer.apply(SkipBodyParsingMiddleware).forRoutes("*path");
+		}
+
+		consumer.apply(AppendSessionReqMiddleware).forRoutes("*path");
 
 		// Get basePath from options or use default
 		let basePath = this.options.auth.options.basePath ?? "/api/auth";
@@ -172,6 +176,8 @@ export class AuthModule
 			...super.forRootAsync(options),
 			providers: [
 				...(forRootAsyncResult.providers ?? []),
+				AuthService,
+				AppendSessionReqMiddleware,
 				...(!options.disableGlobalAuthGuard
 					? [
 							{
@@ -207,6 +213,8 @@ export class AuthModule
 			...forRootResult,
 			providers: [
 				...(forRootResult.providers ?? []),
+				AuthService,
+				AppendSessionReqMiddleware,
 				...(!normalizedOptions.disableGlobalAuthGuard
 					? [
 							{
