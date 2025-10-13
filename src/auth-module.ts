@@ -42,7 +42,7 @@ export type Auth = any;
  */
 @Module({
 	imports: [DiscoveryModule],
-	providers: [AuthService],
+	providers: [],
 	exports: [AuthService],
 })
 export class AuthModule
@@ -176,6 +176,8 @@ export class AuthModule
 			...super.forRootAsync(options),
 			providers: [
 				...(forRootAsyncResult.providers ?? []),
+				AuthService,
+				AppendSessionReqMiddleware,
 				...(!options.disableGlobalAuthGuard
 					? [
 							{
@@ -211,6 +213,8 @@ export class AuthModule
 			...forRootResult,
 			providers: [
 				...(forRootResult.providers ?? []),
+				AuthService,
+				AppendSessionReqMiddleware,
 				...(!normalizedOptions.disableGlobalAuthGuard
 					? [
 							{
