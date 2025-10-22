@@ -1,5 +1,5 @@
-import { Controller, Get } from "@nestjs/common";
-import { OptionalAuth, AllowAnonymous, Session } from "../../src/decorators.ts";
+import { Controller, Get, Request } from "@nestjs/common";
+import { OptionalAuth, AllowAnonymous, Roles } from "../../src/decorators.ts";
 import type { UserSession } from "../../src/auth-guard.ts";
 
 /**
@@ -31,5 +31,17 @@ export class TestController {
 	@Get("optional")
 	optional(@Session() session: UserSession) {
 		return { authenticated: !!session?.user, session };
+	}
+
+	@Roles(["admin"])
+	@Get("admin-protected")
+	adminProtected(@Request() req: UserSession) {
+		return { user: req.user };
+	}
+
+	@Roles(["admin", "moderator"])
+	@Get("admin-moderator-protected")
+	adminModeratorProtected(@Request() req: UserSession) {
+		return { user: req.user };
 	}
 }

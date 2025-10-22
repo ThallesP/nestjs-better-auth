@@ -20,6 +20,15 @@ export const OptionalAuth = (): CustomDecorator<string> =>
 	SetMetadata("OPTIONAL", true);
 
 /**
+ * Specifies the roles required to access a route or controller.
+ * The AuthGuard will check if the authenticated user's roles
+ * include at least one of the specified roles.
+ * @param roles - The roles required for access
+ */
+export const Roles = (roles: string[]): CustomDecorator =>
+	SetMetadata("ROLES", roles);
+
+/**
  * @deprecated Use AllowAnonymous() instead.
  */
 export const Public = AllowAnonymous;

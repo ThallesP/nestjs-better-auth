@@ -119,4 +119,92 @@ describe("rest auth e2e", () => {
 			});
 		});
 	});
+
+	it("should forbid access to admin-protected route without admin role", async () => {
+		const signUp = await testSetup.auth.api.signUpEmail({
+			body: {
+				name: faker.person.fullName(),
+				email: faker.internet.email(),
+				password: faker.internet.password({ length: 10 }),
+			},
+		});
+
+		const token = signUp.token;
+
+		await request(testSetup.app.getHttpServer())
+			.get("/test/admin-protected")
+			.set("Authorization", `Bearer ${token}`)
+			.expect(403)
+			.expect((res) => {
+				expect(res.body?.message).toContain("Insufficient permissions");
+			});
+
+		await request(testSetup.app.getHttpServer())
+			.get("/test/admin-moderator-protected")
+			.set("Authorization", `Bearer ${token}`)
+			.expect(403)
+			.expect((res) => {
+				expect(res.body?.message).toContain("Insufficient permissions");
+			});
+	});
+
+	it("should allow access to admin-protected route with admin role", async () => {
+		const password = faker.internet.password({ length: 10 });
+		const adminUser = await testSetup.auth.api.createUser({
+			body: {
+				name: "Admin",
+				email: faker.internet.email(),
+				password: password,
+				role: "admin",
+			},
+		});
+
+		const { token, user } = await testSetup.auth.api.signInEmail({
+			body: {
+				email: adminUser.user.email,
+				password: password,
+			},
+		});
+
+		const response = await request(testSetup.app.getHttpServer())
+			.get("/test/admin-protected")
+			.set("Authorization", `Bearer ${token}`)
+			.expect(200);
+
+		expect(response.body).toMatchObject({
+			user: expect.objectContaining({
+				id: user.id,
+			}),
+		});
+	});
+
+	it("should allow access to admin-moderator-protected route with moderator role", async () => {
+		const password = faker.internet.password({ length: 10 });
+		const moderatorUser = await testSetup.auth.api.createUser({
+			body: {
+				name: "Admin",
+				email: faker.internet.email(),
+				password: password,
+				role: "moderator",
+			},
+		});
+
+		const { token, user } = await testSetup.auth.api.signInEmail({
+			body: {
+				email: moderatorUser.user.email,
+				password: password,
+			},
+		});
+
+		const response = await request(testSetup.app.getHttpServer())
+			.get("/test/admin-moderator-protected")
+			.set("Authorization", `Bearer ${token}`)
+			.expect(200);
+
+		expect(response.body).toMatchObject({
+			user: expect.objectContaining({
+				id: user.id,
+			}),
+		});
+	});
 });

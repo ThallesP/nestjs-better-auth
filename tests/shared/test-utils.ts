@@ -11,6 +11,8 @@ import { AuthModule } from "../../src/index.ts";
 import { betterAuth } from "better-auth";
 import { TestController } from "./test-controller.ts";
 import { TestResolver } from "./test-resolver.ts";
+import { admin } from "better-auth/plugins/admin";
+import { adminAc, userAc } from "better-auth/plugins/admin/access";
 
 // Create Better Auth instance factory
 export function createTestAuth() {
@@ -19,7 +21,16 @@ export function createTestAuth() {
 		emailAndPassword: {
 			enabled: true,
 		},
-		plugins: [bearer()],
+		plugins: [
+			bearer(),
+			admin({
+				roles: {
+					admin: adminAc,
+					moderator: userAc, // moderator has same permissions as user but is a different custom role
+					user: userAc,
+				},
+			}),
+		],
 	});
 }
 

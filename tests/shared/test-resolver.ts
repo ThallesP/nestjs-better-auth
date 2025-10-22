@@ -1,5 +1,6 @@
 import { Resolver, Query, ObjectType, Field } from "@nestjs/graphql";
-import { AllowAnonymous, OptionalAuth, Session } from "../../src/decorators.ts";
+import { AllowAnonymous, OptionalAuth, Roles, Session } from "../../src/decorators.ts";
+import { Session } from "../../src/decorators.ts";
 import type { UserSession } from "../../src/auth-guard.ts";
 
 @ObjectType()
@@ -43,6 +44,19 @@ export class TestResolver {
 			authenticated: !!session,
 			userId: session?.user?.id,
 		};
+	}
+
+
+	@Roles(["admin"])
+	@Query(() => String)
+	adminProtected(): string {
+		return "admin ok";
+	}
+
+	@Roles(["admin", "moderator"])
+	@Query(() => String)
+	adminModeratorProtected(): string {
+		return "admin or moderator ok";
 	}
 
 	/**
