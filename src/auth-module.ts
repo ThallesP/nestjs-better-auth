@@ -10,6 +10,7 @@ import {
 	DiscoveryService,
 	HttpAdapterHost,
 	MetadataScanner,
+	APP_GUARD,
 } from "@nestjs/core";
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/plugins";
@@ -25,7 +26,6 @@ import { AuthService } from "./auth-service.ts";
 import { SkipBodyParsingMiddleware } from "./middlewares.ts";
 import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
 import { AuthGuard } from "./auth-guard.ts";
-import { APP_GUARD } from "@nestjs/core";
 
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
@@ -70,15 +70,19 @@ export class AuthModule
 			);
 
 		const hasHookProviders = providers.length > 0;
-		const hooksConfigured =
-			typeof this.options.auth?.options?.hooks === "object";
+		const hooks = this.options.auth?.options?.hooks;
+		// Check if hooks is a valid object (not null, not undefined)
+		const hooksConfigured = hooks && typeof hooks === "object";
 
-		if (hasHookProviders && !hooksConfigured)
+		// Only throw error if there are hook providers but hooks is not properly configured
+		if (hasHookProviders && !hooksConfigured) {
 			throw new Error(
 				"Detected @Hook providers but Better Auth 'hooks' are not configured. Add 'hooks: {}' to your betterAuth(...) options.",
 			);
+		}
 
-		if (!hooksConfigured) return;
+		// Return early if no hook providers - no need to set up hooks
+		if (!hasHookProviders) return;
 
 		for (const provider of providers) {
 			const providerPrototype = Object.getPrototypeOf(provider.instance);
@@ -92,31 +96,31 @@ export class AuthModule
 	}
 
 	configure(consumer: MiddlewareConsumer): void {
-		const trustedOrigins = this.options.auth.options.trustedOrigins;
-		// function-based trustedOrigins requires a Request (from web-apis) object to evaluate, which is not available in NestJS (we only have a express Request object)
-		// if we ever need this, take a look at better-call which show an implementation for this
-		const isNotFunctionBased = trustedOrigins && Array.isArray(trustedOrigins);
+		const trustedOrigins = this.options.auth?.options?.trustedOrigins;
 
-		if (!this.options.disableTrustedOriginsCors && isNotFunctionBased) {
+		// Handle CORS configuration based on trustedOrigins
+		if (trustedOrigins && !this.options.disableTrustedOriginsCors) {
+			// function-based trustedOrigins requires a Request (from web-apis) object to evaluate,
+			// which is not available in NestJS (we only have an express Request object)
+			// if we ever need this, take a look at better-call which shows an implementation for this
+			if (!Array.isArray(trustedOrigins)) {
+				throw new Error(
+					"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
+				);
+			}
+
 			this.adapter.httpAdapter.enableCors({
 				origin: trustedOrigins,
 				methods: ["GET", "POST", "PUT", "DELETE"],
 				credentials: true,
 			});
-		} else if (
-			trustedOrigins &&
-			!this.options.disableTrustedOriginsCors &&
-			!isNotFunctionBased
-		)
-			throw new Error(
-				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
-			);
+		}
 
 		if (!this.options.disableBodyParser)
 			consumer.apply(SkipBodyParsingMiddleware).forRoutes("*path");
 
 		// Get basePath from options or use default
-		let basePath = this.options.auth.options.basePath ?? "/api/auth";
+		let basePath = this.options.auth?.options?.basePath ?? "/api/auth";
 
 		// Ensure basePath starts with /
 		if (!basePath.startsWith("/")) {
@@ -141,9 +145,9 @@ export class AuthModule
 
 	private setupHooks(
 		providerMethod: (...args: unknown[]) => unknown,
-		providerClass: { new (...args: unknown[]): unknown },
+		providerInstance: unknown,
 	) {
-		if (!this.options.auth.options.hooks) return;
+		const hooks = this.options.auth.options.hooks;
 
 		for (const { metadataKey, hookType } of HOOKS) {
 			const hasHook = Reflect.hasMetadata(metadataKey, providerMethod);
@@ -151,37 +155,20 @@ export class AuthModule
 
 			const hookPath = Reflect.getMetadata(metadataKey, providerMethod);
 
-			const originalHook = this.options.auth.options.hooks[hookType];
-			this.options.auth.options.hooks[hookType] = createAuthMiddleware(
-				async (ctx) => {
-					if (originalHook) {
-						await originalHook(ctx);
-					}
+			const originalHook = hooks[hookType];
+			hooks[hookType] = createAuthMiddleware(async (ctx) => {
+				if (originalHook) await originalHook(ctx);
 
-					if (hookPath && hookPath !== ctx.path) return;
+				if (hookPath && hookPath !== ctx.path) return;
 
-					await providerMethod.apply(providerClass, [ctx]);
-				},
-			);
+				await providerMethod.apply(providerInstance, [ctx]);
+			});
 		}
 	}
 
 	static forRootAsync(options: typeof ASYNC_OPTIONS_TYPE): DynamicModule {
-		const forRootAsyncResult = super.forRootAsync(options);
-		return {
-			...super.forRootAsync(options),
-			providers: [
-				...(forRootAsyncResult.providers ?? []),
-				...(!options.disableGlobalAuthGuard
-					? [
-							{
-								provide: APP_GUARD,
-								useClass: AuthGuard,
-							},
-						]
-					: []),
-			],
-		};
+		const module = super.forRootAsync(options);
+		return this.addGuardProvider(module, options.disableGlobalAuthGuard);
 	}
 
 	static forRoot(options: typeof OPTIONS_TYPE): DynamicModule;
@@ -196,25 +183,38 @@ export class AuthModule
 		arg1: Auth | typeof OPTIONS_TYPE,
 		arg2?: Omit<typeof OPTIONS_TYPE, "auth">,
 	): DynamicModule {
-		const normalizedOptions: typeof OPTIONS_TYPE =
-			typeof arg1 === "object" && arg1 !== null && "auth" in (arg1 as object)
-				? (arg1 as typeof OPTIONS_TYPE)
-				: ({ ...(arg2 ?? {}), auth: arg1 as Auth } as typeof OPTIONS_TYPE);
+		// Check if using new format: forRoot({ auth, ...options })
+		const isNewFormat =
+			typeof arg1 === "object" && arg1 !== null && "auth" in arg1;
 
-		const forRootResult = super.forRoot(normalizedOptions);
+		const normalizedOptions: typeof OPTIONS_TYPE = isNewFormat
+			? (arg1 as typeof OPTIONS_TYPE)
+			: { ...(arg2 ?? {}), auth: arg1 };
+
+		const module = super.forRoot(normalizedOptions);
+		return this.addGuardProvider(
+			module,
+			normalizedOptions.disableGlobalAuthGuard,
+		);
+	}
+
+	/**
+	 * Adds the global AuthGuard provider if not disabled
+	 */
+	private static addGuardProvider(
+		module: DynamicModule,
+		disableGuard?: boolean,
+	): DynamicModule {
+		if (disableGuard) return module;
 
 		return {
-			...forRootResult,
+			...module,
 			providers: [
-				...(forRootResult.providers ?? []),
-				...(!normalizedOptions.disableGlobalAuthGuard
-					? [
-							{
-								provide: APP_GUARD,
-								useClass: AuthGuard,
-							},
-						]
-					: []),
+				...(module.providers ?? []),
+				{
+					provide: APP_GUARD,
+					useClass: AuthGuard,
+				},
 			],
 		};
 	}

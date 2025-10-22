@@ -32,12 +32,12 @@
 		"dist"
 	],
 	"devDependencies": {
-		"@apollo/server": "^4.12.2",
+		"@apollo/server": "^5.0.0",
 		"@as-integrations/express5": "^1.1.2",
-		"@biomejs/biome": "2.2.4",
+		"@biomejs/biome": "2.2.5",
 		"@faker-js/faker": "^10.0.0",
-		"@nestjs/apollo": "^13.1.0",
-		"@nestjs/graphql": "^13.1.0",
+		"@nestjs/apollo": "^13.2.1",
+		"@nestjs/graphql": "^13.2.0",
 		"@nestjs/platform-express": "^11.1.6",
 		"@nestjs/testing": "^11.1.6",
 		"@swc/cli": "^0.7.8",
