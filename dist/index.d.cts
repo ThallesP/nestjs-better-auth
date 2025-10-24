@@ -134,9 +134,13 @@ type BaseUserSession = NonNullable<Awaited<ReturnType<ReturnType<typeof getSessi
 type UserSession = BaseUserSession & {
     user: BaseUserSession["user"] & {
         role?: string | string[];
+<<<<<<< HEAD
         [key: string]: any;
     };
     [key: string]: any;
+=======
+    };
+>>>>>>> 2e00d3b (build: update package name and version, add dist files)
 };
 declare module "express" {
     interface Request {
@@ -144,12 +148,15 @@ declare module "express" {
         user?: UserSession["user"] | null;
     }
 }
+<<<<<<< HEAD
 declare module "fastify" {
     interface FastifyRequest {
         session?: UserSession | null;
         user?: UserSession["user"] | null;
     }
 }
+=======
+>>>>>>> 2e00d3b (build: update package name and version, add dist files)
 /**
  * NestJS guard that handles authentication for protected routes
  */

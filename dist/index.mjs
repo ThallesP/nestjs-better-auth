@@ -252,7 +252,11 @@ let AuthModule = class extends ConfigurableModuleClass {
         });
       } else {
         this.logger.warn(
+<<<<<<< HEAD
           "Fastify CORS is configured in main.ts. Ensure trustedOrigins match your CORS configuration."
+=======
+          "Fastify CORS setup should be configured during adapter creation if needed."
+>>>>>>> 2e00d3b (build: update package name and version, add dist files)
         );
       }
     } else if (trustedOrigins && !this.options.disableTrustedOriginsCors && !isNotFunctionBased) {
@@ -302,9 +306,12 @@ let AuthModule = class extends ConfigurableModuleClass {
           reply.hijack();
           const req = request.raw;
           const res = reply.raw;
+<<<<<<< HEAD
           if (request.headers && req.headers) {
             Object.assign(req.headers, request.headers);
           }
+=======
+>>>>>>> 2e00d3b (build: update package name and version, add dist files)
           await handler(req, res);
           throw new Error("__HIJACKED__");
         },
