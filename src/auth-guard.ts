@@ -1,106 +1,117 @@
 import {
-	ForbiddenException,
-	Inject,
-	Injectable,
-	UnauthorizedException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
 } from "@nestjs/common";
 import type { CanActivate, ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { getSession } from "better-auth/api";
 import { fromNodeHeaders } from "better-auth/node";
 import {
-	AuthModuleOptions,
-	MODULE_OPTIONS_TOKEN,
+  AuthModuleOptions,
+  MODULE_OPTIONS_TOKEN,
 } from "./auth-module-definition.ts";
-import { getRequestFromContext } from "./utils.ts";
+import { getRequestFromContext, PlatformRequest } from "./utils.ts";
 
 /**
  * Type representing a valid user session after authentication
- * Excludes null and undefined values from the session return type
  */
 export type BaseUserSession = NonNullable<
-	Awaited<ReturnType<ReturnType<typeof getSession>>>
+  Awaited<ReturnType<ReturnType<typeof getSession>>>
 >;
 
 export type UserSession = BaseUserSession & {
-	user: BaseUserSession["user"] & {
-		role?: string | string[];
-	};
+  user: BaseUserSession["user"] & {
+    role?: string | string[];
+  };
 };
+
+// Extend the request type to include session and user
+declare module "express" {
+  interface Request {
+    session?: UserSession | null;
+    user?: UserSession["user"] | null;
+  }
+}
 
 /**
  * NestJS guard that handles authentication for protected routes
- * Can be configured with @AllowAnonymous() or @OptionalAuth() decorators to modify authentication behavior
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
-	constructor(
-		@Inject(Reflector)
-		private readonly reflector: Reflector,
-		@Inject(MODULE_OPTIONS_TOKEN)
-		private readonly options: AuthModuleOptions,
-	) {}
+  constructor(
+    @Inject(Reflector)
+    private readonly reflector: Reflector,
+    @Inject(MODULE_OPTIONS_TOKEN)
+    private readonly options: AuthModuleOptions
+  ) {}
 
-	/**
-	 * Validates if the current request is authenticated
-	 * Attaches session and user information to the request object
-	 * Supports both HTTP and GraphQL execution contexts
-	 * @param context - The execution context of the current request
-	 * @returns True if the request is authorized to proceed, throws an error otherwise
-	 */
-	async canActivate(context: ExecutionContext): Promise<boolean> {
-		const request = getRequestFromContext(context);
-		const session: UserSession | null = await this.options.auth.api.getSession({
-			headers: fromNodeHeaders(
-				request.headers || request?.handshake?.headers || [],
-			),
-		});
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = getRequestFromContext(context);
+    const headers = this.getHeadersFromRequest(request);
 
-		request.session = session;
-		request.user = session?.user ?? null; // useful for observability tools like Sentry
+    const session: UserSession | null = await this.options.auth.api.getSession({
+      headers: fromNodeHeaders(headers),
+    });
 
-		const isPublic = this.reflector.getAllAndOverride<boolean>("PUBLIC", [
-			context.getHandler(),
-			context.getClass(),
-		]);
+    // Attach session and user to request
+    (request as any).session = session;
+    (request as any).user = session?.user ?? null;
 
-		if (isPublic) return true;
+    const isPublic = this.reflector.getAllAndOverride<boolean>("PUBLIC", [
+      context.getHandler(),
+      context.getClass(),
+    ]);
 
-		const isOptional = this.reflector.getAllAndOverride<boolean>("OPTIONAL", [
-			context.getHandler(),
-			context.getClass(),
-		]);
+    if (isPublic) return true;
 
-		if (isOptional && !session) return true;
+    const isOptional = this.reflector.getAllAndOverride<boolean>("OPTIONAL", [
+      context.getHandler(),
+      context.getClass(),
+    ]);
 
-		if (!session)
-			throw new UnauthorizedException({
-				code: "UNAUTHORIZED",
-				message: "Unauthorized",
-			});
+    if (isOptional && !session) return true;
 
-		const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
-			context.getHandler(),
-			context.getClass(),
-		]);
+    if (!session)
+      throw new UnauthorizedException({
+        code: "UNAUTHORIZED",
+        message: "Unauthorized",
+      });
 
-		if (requiredRoles && requiredRoles.length > 0) {
-			const userRole = session.user.role;
-			let hasRole = false;
-			if (Array.isArray(userRole)) {
-				hasRole = userRole.some((role) => requiredRoles.includes(role));
-			} else if (typeof userRole === "string") {
-				hasRole = requiredRoles.includes(userRole);
-			}
+    const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
+      context.getHandler(),
+      context.getClass(),
+    ]);
 
-			if (!hasRole) {
-				throw new ForbiddenException({
-					code: "FORBIDDEN",
-					message: "Insufficient permissions",
-				});
-			}
-		}
+    if (requiredRoles && requiredRoles.length > 0) {
+      const userRole = session.user.role;
+      let hasRole = false;
+      if (Array.isArray(userRole)) {
+        hasRole = userRole.some((role) => requiredRoles.includes(role));
+      } else if (typeof userRole === "string") {
+        hasRole = requiredRoles.includes(userRole);
+      }
 
-		return true;
-	}
+      if (!hasRole) {
+        throw new ForbiddenException({
+          code: "FORBIDDEN",
+          message: "Insufficient permissions",
+        });
+      }
+    }
+
+    return true;
+  }
+
+  private getHeadersFromRequest(
+    req: PlatformRequest
+  ): Record<string, string | string[]> {
+    if ("raw" in req && req.raw) {
+      // Fastify request - get headers from raw object
+      return req.raw.headers || {};
+    }
+    // Express request
+    return req.headers || {};
+  }
 }
