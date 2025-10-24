@@ -24,12 +24,21 @@ export type BaseUserSession = NonNullable<
 export type UserSession = BaseUserSession & {
   user: BaseUserSession["user"] & {
     role?: string | string[];
+    [key: string]: any; // Allow custom fields from Better Auth plugins
   };
+  [key: string]: any; // Allow custom session fields
 };
 
 // Extend the request type to include session and user
 declare module "express" {
   interface Request {
+    session?: UserSession | null;
+    user?: UserSession["user"] | null;
+  }
+}
+
+declare module "fastify" {
+  interface FastifyRequest {
     session?: UserSession | null;
     user?: UserSession["user"] | null;
   }
