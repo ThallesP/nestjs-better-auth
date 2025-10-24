@@ -8,7 +8,7 @@ import * as express from "express";
 export function SkipBodyParsingMiddleware(basePath = "/api/auth") {
 	// Return a middleware function compatible with Nest's consumer.apply()
 	// NestJS consumer.apply() accepts plain functions directly
-	return function (req: Request, res: Response, next: NextFunction): void {
+	return (req: Request, res: Response, next: NextFunction): void => {
 		// skip body parsing for better-auth routes
 		if (req.baseUrl.startsWith(basePath)) {
 			next();

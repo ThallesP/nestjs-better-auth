@@ -112,7 +112,6 @@ export class AuthModule
 				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
 			);
 
-
 		// Get basePath from options or use default
 		let basePath = this.options.auth.options.basePath ?? "/api/auth";
 
