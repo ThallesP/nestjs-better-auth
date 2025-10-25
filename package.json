@@ -1,5 +1,5 @@
 {
-	"name": "@surdma/nestjs-better-auth",
+	"name": "@surdma/better-auth",
 	"version": "2.1.1",
 	"description": "Better Auth for NestJS",
 	"author": "Thalles Passos",
