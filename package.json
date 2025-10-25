@@ -4,11 +4,8 @@
 	"description": "Better Auth for NestJS with Express ↔ Fastify abstraction layer and enhanced logging.",
 	"author": "surdma",
 	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/surdma/nestjs-better-auth.git"
-	},
-	"keywords": [
+	"repository": "https://github.com/surdma/nestjs-better-auth",
+		"keywords": [
 		"nestjs",
 		"better-auth",
 		"auth",
