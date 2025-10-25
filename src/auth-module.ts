@@ -110,7 +110,7 @@ export class AuthModule
         });
       } else {
         this.logger.warn(
-          "Fastify CORS setup should be configured during adapter creation if needed."
+          "Fastify CORS is configured in main.ts. Ensure trustedOrigins match your CORS configuration."
         );
       }
     } else if (
@@ -177,6 +177,13 @@ export class AuthModule
           reply.hijack();
           const req = request.raw;
           const res = reply.raw;
+          
+          // Ensure headers from Fastify request are properly merged with raw request
+          if (request.headers && req.headers) {
+            // Merge Fastify processed headers with raw headers
+            Object.assign(req.headers, request.headers);
+          }
+          
           await handler(req, res);
           throw new Error("__HIJACKED__");
         },
