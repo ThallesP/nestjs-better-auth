@@ -135,12 +135,18 @@ type UserSession = BaseUserSession & {
     user: BaseUserSession["user"] & {
         role?: string | string[];
 <<<<<<< HEAD
+<<<<<<< HEAD
         [key: string]: any;
     };
     [key: string]: any;
 =======
     };
 >>>>>>> 2e00d3b (build: update package name and version, add dist files)
+=======
+        [key: string]: any;
+    };
+    [key: string]: any;
+>>>>>>> 62fb88f (fix(auth): resolve merge conflicts in type definitions and auth module)
 };
 declare module "express" {
     interface Request {
@@ -149,14 +155,20 @@ declare module "express" {
     }
 }
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 62fb88f (fix(auth): resolve merge conflicts in type definitions and auth module)
 declare module "fastify" {
     interface FastifyRequest {
         session?: UserSession | null;
         user?: UserSession["user"] | null;
     }
 }
+<<<<<<< HEAD
 =======
 >>>>>>> 2e00d3b (build: update package name and version, add dist files)
+=======
+>>>>>>> 62fb88f (fix(auth): resolve merge conflicts in type definitions and auth module)
 /**
  * NestJS guard that handles authentication for protected routes
  */
