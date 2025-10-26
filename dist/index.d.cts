@@ -134,10 +134,18 @@ type BaseUserSession = NonNullable<Awaited<ReturnType<ReturnType<typeof getSessi
 type UserSession = BaseUserSession & {
     user: BaseUserSession["user"] & {
         role?: string | string[];
+        [key: string]: any;
     };
+    [key: string]: any;
 };
 declare module "express" {
     interface Request {
+        session?: UserSession | null;
+        user?: UserSession["user"] | null;
+    }
+}
+declare module "fastify" {
+    interface FastifyRequest {
         session?: UserSession | null;
         user?: UserSession["user"] | null;
     }
