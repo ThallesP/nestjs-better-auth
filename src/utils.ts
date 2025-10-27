@@ -23,18 +23,20 @@ export interface FastifyRequest {
   session?: UserSession;
 }
 
-export type PlatformRequest = ExpressRequest | FastifyRequest;
-
 /**
- * Extracts the request object from either HTTP or GraphQL execution context
+ * Extracts the request object from either HTTP, GraphQL or WebSocket execution context
+ * @param context - The execution context
+ * @returns The request object
  */
-export function getRequestFromContext(
-  context: ExecutionContext
-): PlatformRequest {
-  const contextType = context.getType<GqlContextType>();
-  if (contextType === "graphql") {
-    return GqlExecutionContext.create(context).getContext().req;
-  }
+export function getRequestFromContext(context: ExecutionContext) {
+	const contextType = context.getType<GqlContextType>();
+	if (contextType === "graphql") {
+		return GqlExecutionContext.create(context).getContext().req;
+	}
+
+	if (contextType === "ws") {
+		return context.switchToWs().getClient();
+	}
 
   return context.switchToHttp().getRequest();
 }
@@ -56,27 +58,4 @@ export function isFastifyAdapter(adapter: any): boolean {
  */
 export function getPlatform(adapter: any): "express" | "fastify" {
   return isFastifyAdapter(adapter) ? "fastify" : "express";
-}
-
-/**
- * Gets the base URL from a request (works for both Express and Fastify)
- */
-export function getBaseUrl(req: PlatformRequest): string {
-  if ("raw" in req && req.raw) {
-    return req.raw.baseUrl || req.raw.originalUrl || req.raw.url || "";
-  }
-  // Express request
-  return (
-    (req as ExpressRequest).baseUrl ||
-    (req as ExpressRequest).originalUrl ||
-    req.url ||
-    ""
-  );
-}
-
-/**
- * Checks if a request is an Express request
- */
-export function isExpressRequest(req: PlatformRequest): boolean {
-  return !("raw" in req) || !req.raw;
 }
