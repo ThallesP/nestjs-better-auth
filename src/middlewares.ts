@@ -1,12 +1,16 @@
-import { Injectable, type NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
 import * as express from "express";
 
-@Injectable()
-export class SkipBodyParsingMiddleware implements NestMiddleware {
-	use(req: Request, res: Response, next: NextFunction): void {
+/**
+ * Factory that returns a Nest middleware which skips body parsing for the
+ * configured basePath.
+ */
+export function SkipBodyParsingMiddleware(basePath = "/api/auth") {
+	// Return a middleware function compatible with Nest's consumer.apply()
+	// NestJS consumer.apply() accepts plain functions directly
+	return (req: Request, res: Response, next: NextFunction): void => {
 		// skip body parsing for better-auth routes
-		if (req.baseUrl.startsWith("/api/auth")) {
+		if (req.baseUrl.startsWith(basePath)) {
 			next();
 			return;
 		}
@@ -19,5 +23,5 @@ export class SkipBodyParsingMiddleware implements NestMiddleware {
 			}
 			express.urlencoded({ extended: true })(req, res, next);
 		});
-	}
+	};
 }

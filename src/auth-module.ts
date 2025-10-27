@@ -112,9 +112,6 @@ export class AuthModule
 				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
 			);
 
-		if (!this.options.disableBodyParser)
-			consumer.apply(SkipBodyParsingMiddleware).forRoutes("*path");
-
 		// Get basePath from options or use default
 		let basePath = this.options.auth.options.basePath ?? "/api/auth";
 
@@ -126,6 +123,10 @@ export class AuthModule
 		// Ensure basePath doesn't end with /
 		if (basePath.endsWith("/")) {
 			basePath = basePath.slice(0, -1);
+		}
+
+		if (!this.options.disableBodyParser) {
+			consumer.apply(SkipBodyParsingMiddleware(basePath)).forRoutes("*path");
 		}
 
 		const handler = toNodeHandler(this.options.auth);
