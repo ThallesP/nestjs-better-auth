@@ -18,3 +18,22 @@ export function getRequestFromContext(context: ExecutionContext) {
 
 	return context.switchToHttp().getRequest();
 }
+
+/**
+ * Detects if the current platform adapter is Fastify
+ */
+export function isFastifyAdapter(adapter: any): boolean {
+	return (
+		adapter &&
+		typeof adapter === "object" &&
+		(adapter.constructor?.name === "FastifyAdapter" ||
+			adapter.instance?.constructor?.name === "FastifyInstance")
+	);
+}
+
+/**
+ * Returns the platform identifier for the current HTTP adapter
+ */
+export function getPlatform(adapter: any): "express" | "fastify" {
+	return isFastifyAdapter(adapter) ? "fastify" : "express";
+}
