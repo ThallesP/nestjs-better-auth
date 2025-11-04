@@ -18,20 +18,7 @@ import {
 } from "./auth-module-definition.ts";
 import { getRequestFromContext } from "./utils.ts";
 import { WsException } from "@nestjs/websockets";
-
-/**
- * Type representing a valid user session after authentication
- * Excludes null and undefined values from the session return type
- */
-export type BaseUserSession = NonNullable<
-	Awaited<ReturnType<ReturnType<typeof getSession>>>
->;
-
-export type UserSession = BaseUserSession & {
-	user: BaseUserSession["user"] & {
-		role?: string | string[];
-	};
-};
+import type { GqlContextType } from "@nestjs/graphql";
 
 const AuthErrorType = {
 	UNAUTHORIZED: "UNAUTHORIZED",
@@ -45,27 +32,21 @@ const AuthContextErrorMap: Record<
 	http: {
 		UNAUTHORIZED: (args) =>
 			new UnauthorizedException(
-				args ?? {
-					code: "UNAUTHORIZED",
-					message: "Unauthorized",
-				},
+				args ?? { code: "UNAUTHORIZED", message: "Unauthorized" },
 			),
 		FORBIDDEN: (args) =>
 			new ForbiddenException(
-				args ?? {
-					code: "FORBIDDEN",
-					message: "Insufficient permissions",
-				},
+				args ?? { code: "FORBIDDEN", message: "Insufficient permissions" },
 			),
 	},
 	ws: {
-		UNAUTHORIZED: (args) =>
+		UNAUTHORIZED: (args?: unknown) =>
 			new WsException(
 				typeof args === "string" || (args && typeof args === "object")
 					? (args as string | object)
 					: "UNAUTHORIZED",
 			),
-		FORBIDDEN: (args) =>
+		FORBIDDEN: (args?: unknown) =>
 			new WsException(
 				typeof args === "string" || (args && typeof args === "object")
 					? (args as string | object)
@@ -73,11 +54,25 @@ const AuthContextErrorMap: Record<
 			),
 	},
 	rpc: {
-		UNAUTHORIZED: (args) =>
+		UNAUTHORIZED: (args?: unknown) =>
 			new Error(typeof args === "string" ? args : "UNAUTHORIZED"),
-		FORBIDDEN: (args) =>
+		FORBIDDEN: (args?: unknown) =>
 			new Error(typeof args === "string" ? args : "FORBIDDEN"),
 	},
+};
+
+/**
+ * Type representing a valid user session after authentication
+ * Excludes null and undefined values from the session return type
+ */
+export type BaseUserSession = NonNullable<
+	Awaited<ReturnType<ReturnType<typeof getSession>>>
+>;
+
+export type UserSession = BaseUserSession & {
+	user: BaseUserSession["user"] & {
+		role?: string | string[];
+	};
 };
 
 /**
@@ -102,33 +97,44 @@ export class AuthGuard implements CanActivate {
 	 */
 	async canActivate(context: ExecutionContext): Promise<boolean> {
 		const request = getRequestFromContext(context);
+
+		// Robust header extraction across HTTP, GraphQL, and WS
+		const headers =
+			(request as any)?.headers ??
+			(request as any)?.handshake?.headers ??
+			{};
+
 		const session: UserSession | null = await this.options.auth.api.getSession({
-			headers: fromNodeHeaders(
-				request.headers || request?.handshake?.headers || [],
-			),
+			headers: fromNodeHeaders(headers),
 		});
 
-		request.session = session;
-		request.user = session?.user ?? null; // useful for observability tools like Sentry
+		// Attach session and user to the request for all contexts
+		(request as any).session = session;
+		(request as any).user = session?.user ?? null;
 
+		// Decorator checks
 		const isPublic = this.reflector.getAllAndOverride<boolean>("PUBLIC", [
 			context.getHandler(),
 			context.getClass(),
 		]);
-
 		if (isPublic) return true;
 
 		const isOptional = this.reflector.getAllAndOverride<boolean>("OPTIONAL", [
 			context.getHandler(),
 			context.getClass(),
 		]);
+		// Optional routes should always proceed, regardless of session or roles
+		if (isOptional) return true;
 
-		if (isOptional && !session) return true;
-
+		// Normalize context key: treat GraphQL as HTTP for error mapping
 		const ctxType = context.getType();
+		const gqlType = context.getType<GqlContextType>();
+		const ctxKey: ContextType = gqlType === "graphql" ? "http" : ctxType;
 
-		if (!session) throw AuthContextErrorMap[ctxType].UNAUTHORIZED();
+		// Require session for non-optional routes
+		if (!session) throw AuthContextErrorMap[ctxKey].UNAUTHORIZED();
 
+		// Role-based access control
 		const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
 			context.getHandler(),
 			context.getClass(),
@@ -137,15 +143,14 @@ export class AuthGuard implements CanActivate {
 		if (requiredRoles && requiredRoles.length > 0) {
 			const userRole = session.user.role;
 			let hasRole = false;
+
 			if (Array.isArray(userRole)) {
 				hasRole = userRole.some((role) => requiredRoles.includes(role));
 			} else if (typeof userRole === "string") {
-				hasRole = userRole
-					.split(",")
-					.some((role) => requiredRoles.includes(role));
+				hasRole = requiredRoles.includes(userRole);
 			}
 
-			if (!hasRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+			if (!hasRole) throw AuthContextErrorMap[ctxKey].FORBIDDEN();
 		}
 
 		return true;
