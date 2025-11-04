@@ -59,12 +59,24 @@ const AuthContextErrorMap: Record<
 			),
 	},
 	ws: {
-		UNAUTHORIZED: (args) => new WsException(typeof args === "string" ? args : JSON.stringify(args ?? "UNAUTHORIZED")),
-		FORBIDDEN: (args) => new WsException(typeof args === "string" ? args : JSON.stringify(args ?? "FORBIDDEN")),
+		UNAUTHORIZED: (args) =>
+			new WsException(
+				typeof args === "string" || (args && typeof args === "object")
+					? (args as string | object)
+					: "UNAUTHORIZED",
+			),
+		FORBIDDEN: (args) =>
+			new WsException(
+				typeof args === "string" || (args && typeof args === "object")
+					? (args as string | object)
+					: "FORBIDDEN",
+			),
 	},
 	rpc: {
-		UNAUTHORIZED: (args) => new Error(typeof args === "string" ? args : JSON.stringify(args ?? "UNAUTHORIZED")),
-		FORBIDDEN: (args) => new Error(typeof args === "string" ? args : JSON.stringify(args ?? "FORBIDDEN")),
+		UNAUTHORIZED: (args) =>
+			new Error(typeof args === "string" ? args : "UNAUTHORIZED"),
+		FORBIDDEN: (args) =>
+			new Error(typeof args === "string" ? args : "FORBIDDEN"),
 	},
 };
 

@@ -119,13 +119,14 @@ export class AuthModule
       );
     }
 
-    if (!this.options.disableBodyParser && this.platform === "express") {
-      consumer.apply(SkipBodyParsingMiddleware).forRoutes("*path");
-    }
-
     let basePath = this.options.auth.options.basePath ?? "/api/auth";
     if (!basePath.startsWith("/")) basePath = `/${basePath}`;
     if (basePath.endsWith("/")) basePath = basePath.slice(0, -1);
+
+    // Apply body parser skip only for Express (invoke factory with basePath)
+    if (!this.options.disableBodyParser && this.platform === "express") {
+      consumer.apply(SkipBodyParsingMiddleware(basePath)).forRoutes("*path");
+    }
 
     const handler = toNodeHandler(this.options.auth);
     this.createPlatformAwareHandler(basePath, handler);
