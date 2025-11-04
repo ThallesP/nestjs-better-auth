@@ -140,7 +140,9 @@ export class AuthGuard implements CanActivate {
 			if (Array.isArray(userRole)) {
 				hasRole = userRole.some((role) => requiredRoles.includes(role));
 			} else if (typeof userRole === "string") {
-				hasRole = requiredRoles.includes(userRole);
+				hasRole = userRole
+					.split(",")
+					.some((role) => requiredRoles.includes(role));
 			}
 
 			if (!hasRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
