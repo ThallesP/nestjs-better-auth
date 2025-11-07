@@ -1,11 +1,13 @@
 import { ConfigurableModuleBuilder } from "@nestjs/common";
 import type { Auth } from "./auth-module.ts";
+import type { Request, Response, NextFunction } from "express";
 
 export type AuthModuleOptions<A = Auth> = {
 	auth: A;
 	disableTrustedOriginsCors?: boolean;
 	disableBodyParser?: boolean;
 	disableGlobalAuthGuard?: boolean;
+	middleware?: (req: Request, res: Response, next: NextFunction) => void;
 };
 
 export const MODULE_OPTIONS_TOKEN = Symbol("AUTH_MODULE_OPTIONS");
