@@ -26,6 +26,7 @@ import { SkipBodyParsingMiddleware } from "./middlewares.ts";
 import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
 import { AuthGuard } from "./auth-guard.ts";
 import { APP_GUARD } from "@nestjs/core";
+import { createMikroOrmContextMiddleware } from "./mikro-orm-context.middleware.ts";
 
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
@@ -127,6 +128,17 @@ export class AuthModule
 
 		if (!this.options.disableBodyParser) {
 			consumer.apply(SkipBodyParsingMiddleware(basePath)).forRoutes("*path");
+		}
+
+		// Apply MikroORM context middleware if provided
+		if (this.options.mikroOrm) {
+			const MikroOrmMiddleware = createMikroOrmContextMiddleware(
+				this.options.mikroOrm,
+			);
+			consumer.apply(MikroOrmMiddleware).forRoutes(`${basePath}/*`);
+			this.logger.log(
+				"MikroORM RequestContext middleware enabled for Better Auth routes",
+			);
 		}
 
 		const handler = toNodeHandler(this.options.auth);

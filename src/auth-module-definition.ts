@@ -6,6 +6,13 @@ export type AuthModuleOptions<A = Auth> = {
 	disableTrustedOriginsCors?: boolean;
 	disableBodyParser?: boolean;
 	disableGlobalAuthGuard?: boolean;
+	/**
+	 * MikroORM instance for automatic request context handling.
+	 * When provided, creates a forked EntityManager for each Better Auth request,
+	 * preventing "Using global EntityManager instance methods" errors.
+	 * Requires @mikro-orm/core to be installed.
+	 */
+	mikroOrm?: unknown;
 };
 
 export const MODULE_OPTIONS_TOKEN = Symbol("AUTH_MODULE_OPTIONS");

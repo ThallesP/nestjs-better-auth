@@ -349,3 +349,51 @@ The available options are:
 | `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. Use this if you want to handle CORS configuration manually. |
 | `disableBodyParser`         | `false` | When set to `true`, disables the automatic body parser middleware. Use this if you want to handle request body parsing manually.                                         |
 | `disableGlobalAuthGuard`    | `false` | When set to `true`, does not register `AuthGuard` as a global guard. Use this if you prefer to apply `AuthGuard` manually or register it yourself via `APP_GUARD`.       |
+| `mikroOrm`                  | `undefined` | Optional MikroORM instance for automatic request context handling. See [MikroORM Integration](#mikroorm-integration) below.                                              |
+
+## MikroORM Integration
+
+If you're using Better Auth with the [better-auth-mikro-orm](https://github.com/octet-stream/better-auth-mikro-orm) adapter, you may encounter the error:
+
+```
+ValidationError: Using global EntityManager instance methods for context specific actions is disallowed.
+```
+
+This library provides automatic MikroORM `RequestContext` handling to solve this issue. Simply pass your MikroORM instance to the `mikroOrm` option:
+
+```typescript title="auth.module.ts"
+import { Module } from "@nestjs/common";
+import { AuthModule } from "@thallesp/nestjs-better-auth";
+import { MikroOrmModule } from "@mikro-orm/nestjs";
+import { MikroORM } from "@mikro-orm/core";
+import { createAuth } from "./auth.config";
+
+@Module({
+  imports: [
+    AuthModule.forRootAsync({
+      imports: [MikroOrmModule],
+      inject: [MikroORM],
+      useFactory: (orm: MikroORM) => {
+        const auth = createAuth(orm); // Pass ORM to your auth config
+        return {
+          auth,
+          mikroOrm: orm, // Enable MikroORM context middleware
+        };
+      },
+    }),
+  ],
+})
+export class AuthModule {}
+```
+
+**How it works:**
+
+The library automatically applies a middleware to all Better Auth routes (`/api/auth/*`) that creates a request-scoped `EntityManager` fork using MikroORM's `RequestContext.create()`. This ensures:
+
+- One EntityManager fork per request
+- Proper context isolation between requests
+- No need for `allowGlobalContext: true` in your MikroORM config
+
+**Requirements:**
+- `@mikro-orm/core` must be installed
+- Works with any Better Auth database adapter that uses MikroORM
