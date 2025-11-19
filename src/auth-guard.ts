@@ -1,15 +1,16 @@
+import type {
+	CanActivate,
+	ContextType,
+	ExecutionContext,
+} from "@nestjs/common";
 import {
 	ForbiddenException,
 	Inject,
 	Injectable,
 	UnauthorizedException,
 } from "@nestjs/common";
-import type {
-	CanActivate,
-	ContextType,
-	ExecutionContext,
-} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import { WsException } from "@nestjs/websockets";
 import type { getSession } from "better-auth/api";
 import { fromNodeHeaders } from "better-auth/node";
 import {
@@ -17,7 +18,6 @@ import {
 	MODULE_OPTIONS_TOKEN,
 } from "./auth-module-definition.ts";
 import { getRequestFromContext } from "./utils.ts";
-import { WsException } from "@nestjs/websockets";
 
 /**
  * Type representing a valid user session after authentication
@@ -38,8 +38,10 @@ const AuthErrorType = {
 	FORBIDDEN: "FORBIDDEN",
 } as const;
 
+type ExtendedContextType = ContextType | "graphql";
+
 const AuthContextErrorMap: Record<
-	ContextType,
+	ExtendedContextType,
 	Record<keyof typeof AuthErrorType, (args?: unknown) => Error>
 > = {
 	http: {
@@ -66,7 +68,10 @@ const AuthContextErrorMap: Record<
 		UNAUTHORIZED: () => new Error("UNAUTHORIZED"),
 		FORBIDDEN: () => new Error("FORBIDDEN"),
 	},
+	graphql: {} as never,
 };
+
+AuthContextErrorMap.graphql = AuthContextErrorMap.http;
 
 /**
  * NestJS guard that handles authentication for protected routes
@@ -113,9 +118,11 @@ export class AuthGuard implements CanActivate {
 
 		if (isOptional && !session) return true;
 
-		const ctxType = context.getType();
+		const ctxType = (context.getType() as ExtendedContextType) ?? "http";
+		const errorFactory =
+			AuthContextErrorMap[ctxType] ?? AuthContextErrorMap.http;
 
-		if (!session) throw AuthContextErrorMap[ctxType].UNAUTHORIZED();
+		if (!session) throw errorFactory.UNAUTHORIZED();
 
 		const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
 			context.getHandler(),
@@ -133,7 +140,7 @@ export class AuthGuard implements CanActivate {
 					.some((role) => requiredRoles.includes(role));
 			}
 
-			if (!hasRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+			if (!hasRole) throw errorFactory.FORBIDDEN();
 		}
 
 		return true;

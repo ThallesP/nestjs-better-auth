@@ -1,19 +1,22 @@
-import { Inject, Logger, Module } from "@nestjs/common";
 import type {
 	DynamicModule,
 	MiddlewareConsumer,
 	NestModule,
-	OnModuleInit,
+	OnApplicationBootstrap,
 } from "@nestjs/common";
+import { Inject, Logger, Module } from "@nestjs/common";
 import {
+	APP_GUARD,
 	DiscoveryModule,
 	DiscoveryService,
 	HttpAdapterHost,
 	MetadataScanner,
 } from "@nestjs/core";
+import type { GenericEndpointContext } from "better-auth";
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/plugins";
 import type { Request, Response } from "express";
+import { AuthGuard } from "./auth-guard.ts";
 import {
 	type ASYNC_OPTIONS_TYPE,
 	type AuthModuleOptions,
@@ -22,10 +25,19 @@ import {
 	type OPTIONS_TYPE,
 } from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
+import type {
+	DatabaseHookMetadata,
+	DatabaseHookModel,
+	DatabaseHookOperation,
+} from "./decorators.ts";
 import { SkipBodyParsingMiddleware } from "./middlewares.ts";
-import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
-import { AuthGuard } from "./auth-guard.ts";
-import { APP_GUARD } from "@nestjs/core";
+import {
+	AFTER_HOOK_KEY,
+	BEFORE_HOOK_KEY,
+	DATABASE_HOOK_KEY,
+	DATABASE_HOOK_METADATA_KEY,
+	HOOK_KEY,
+} from "./symbols.ts";
 
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
@@ -46,7 +58,7 @@ export type Auth = any;
 })
 export class AuthModule
 	extends ConfigurableModuleClass
-	implements NestModule, OnModuleInit
+	implements NestModule, OnApplicationBootstrap
 {
 	private readonly logger = new Logger(AuthModule.name);
 	constructor(
@@ -62,31 +74,61 @@ export class AuthModule
 		super();
 	}
 
-	onModuleInit(): void {
+	onApplicationBootstrap(): void {
 		const providers = this.discoveryService
 			.getProviders()
 			.filter(
 				({ metatype }) => metatype && Reflect.getMetadata(HOOK_KEY, metatype),
 			);
 
+		const databaseHookProviders = this.discoveryService
+			.getProviders()
+			.filter(
+				({ metatype }) =>
+					metatype && Reflect.getMetadata(DATABASE_HOOK_KEY, metatype),
+			);
+
 		const hasHookProviders = providers.length > 0;
+		const hasDatabaseHookProviders = databaseHookProviders.length > 0;
 		const hooksConfigured =
 			typeof this.options.auth?.options?.hooks === "object";
+		const databaseHooksConfigured =
+			typeof this.options.auth?.options?.databaseHooks === "object";
 
 		if (hasHookProviders && !hooksConfigured)
 			throw new Error(
 				"Detected @Hook providers but Better Auth 'hooks' are not configured. Add 'hooks: {}' to your betterAuth(...) options.",
 			);
 
-		if (!hooksConfigured) return;
+		if (hasDatabaseHookProviders && !databaseHooksConfigured)
+			throw new Error(
+				"Detected @DatabaseHook providers but Better Auth 'databaseHooks' are not configured. Add 'databaseHooks: {}' to your betterAuth(...) options.",
+			);
 
-		for (const provider of providers) {
+		if (hooksConfigured) {
+			for (const provider of providers) {
+				if (!provider.instance) continue;
+				const providerPrototype = Object.getPrototypeOf(provider.instance);
+				const methods =
+					this.metadataScanner.getAllMethodNames(providerPrototype);
+
+				for (const method of methods) {
+					const providerMethod = providerPrototype[method];
+					this.setupHooks(providerMethod, provider.instance);
+				}
+			}
+		}
+
+		if (!databaseHooksConfigured) return;
+
+		for (const provider of databaseHookProviders) {
+			if (!provider.instance) continue;
 			const providerPrototype = Object.getPrototypeOf(provider.instance);
 			const methods = this.metadataScanner.getAllMethodNames(providerPrototype);
 
 			for (const method of methods) {
 				const providerMethod = providerPrototype[method];
-				this.setupHooks(providerMethod, provider.instance);
+				this.setupDatabaseHooks(providerMethod, provider.instance, method);
 			}
 		}
 	}
@@ -167,6 +209,133 @@ export class AuthModule
 		}
 	}
 
+	private setupDatabaseHooks(
+		providerMethod: (...args: unknown[]) => unknown,
+		providerInstance: Record<string, unknown>,
+		methodName?: string,
+	) {
+		const databaseHooks = this.options.auth.options.databaseHooks as
+			| DatabaseHooksMap
+			| undefined;
+		if (!databaseHooks) return;
+
+		const metadata = this.getDatabaseHookMetadata(
+			providerMethod,
+			providerInstance,
+			methodName,
+		);
+		if (!metadata) return;
+
+		const { model, operation, stage } = metadata;
+
+		if (!databaseHooks[model]) {
+			databaseHooks[model] = {} as DatabaseModelHooks;
+		}
+		const modelHooks = databaseHooks[model] as DatabaseModelHooks;
+
+		if (!modelHooks[operation]) {
+			modelHooks[operation] = {};
+		}
+		const operationHooks = modelHooks[operation] as DatabaseHookStageHandlers;
+
+		if (stage === "before") {
+			const originalHook = operationHooks.before;
+			const boundProviderMethod = providerMethod.bind(
+				providerInstance,
+			) as DatabaseBeforeHookFn;
+
+			operationHooks.before = this.composeBeforeDatabaseHook(
+				originalHook,
+				boundProviderMethod,
+			);
+			return;
+		}
+
+		const originalHook = operationHooks.after;
+		const boundProviderMethod = providerMethod.bind(
+			providerInstance,
+		) as DatabaseAfterHookFn;
+
+		operationHooks.after = this.composeAfterDatabaseHook(
+			originalHook,
+			boundProviderMethod,
+		);
+	}
+
+	private composeBeforeDatabaseHook(
+		originalHook: DatabaseBeforeHookFn | undefined,
+		providerMethod: DatabaseBeforeHookFn,
+	): DatabaseBeforeHookFn {
+		return async (data, ctx) => {
+			let payload = data;
+			let previousResult: DatabaseBeforeHookResult | undefined;
+
+			if (originalHook) {
+				const originalResult = await originalHook(data, ctx);
+				if (originalResult === false) return false;
+
+				if (this.isDatabaseHookDataResult(originalResult)) {
+					payload = originalResult.data;
+					previousResult = originalResult;
+				} else if (originalResult !== undefined) {
+					return originalResult;
+				}
+			}
+
+			const providerResult = await providerMethod(payload, ctx);
+
+			if (providerResult === false) return false;
+			if (this.isDatabaseHookDataResult(providerResult)) {
+				return providerResult;
+			}
+
+			if (providerResult !== undefined) {
+				return providerResult;
+			}
+
+			return previousResult;
+		};
+	}
+
+	private composeAfterDatabaseHook(
+		originalHook: DatabaseAfterHookFn | undefined,
+		providerMethod: DatabaseAfterHookFn,
+	): DatabaseAfterHookFn {
+		return async (data, ctx) => {
+			if (originalHook) {
+				await originalHook(data, ctx);
+			}
+			await providerMethod(data, ctx);
+		};
+	}
+
+	private getDatabaseHookMetadata(
+		providerMethod: (...args: unknown[]) => unknown,
+		providerInstance: Record<string, unknown>,
+		methodName?: string,
+	): DatabaseHookMetadata | undefined {
+		const direct = Reflect.getMetadata(
+			DATABASE_HOOK_METADATA_KEY,
+			providerMethod,
+		) as DatabaseHookMetadata | undefined;
+		if (direct) return direct;
+
+		if (!methodName) return undefined;
+
+		const prototype = Object.getPrototypeOf(providerInstance);
+		return Reflect.getMetadata(
+			DATABASE_HOOK_METADATA_KEY,
+			prototype,
+			methodName,
+		) as DatabaseHookMetadata | undefined;
+	}
+
+	private isDatabaseHookDataResult(
+		result: unknown,
+	): result is { data: Record<string, unknown> } {
+		return typeof result === "object" && result !== null && "data" in result;
+	}
+
 	static forRootAsync(options: typeof ASYNC_OPTIONS_TYPE): DynamicModule {
 		const forRootAsyncResult = super.forRootAsync(options);
 		return {
@@ -220,3 +389,29 @@ export class AuthModule
 		};
 	}
 }
+
+type DatabaseHookStageHandlers = {
+	before?: DatabaseBeforeHookFn;
+	after?: DatabaseAfterHookFn;
+};
+
+type DatabaseModelHooks = Partial<
+	Record<DatabaseHookOperation, DatabaseHookStageHandlers>
+>;
+
+type DatabaseHooksMap = Partial<Record<DatabaseHookModel, DatabaseModelHooks>>;
+
+type DatabaseBeforeHookResult =
+	| false
+	| undefined
+	| { data: Record<string, unknown> };
+
+type DatabaseBeforeHookFn = (
+	data: Record<string, unknown>,
+	ctx?: GenericEndpointContext,
+) => Promise<DatabaseBeforeHookResult>;
+
+type DatabaseAfterHookFn = (
+	data: Record<string, unknown>,
+	ctx?: GenericEndpointContext,
+) => Promise<void>;

@@ -232,6 +232,52 @@ import { auth } from "./auth";
 export class AppModule {}
 ```
 
+### Database Hook Decorators
+
+> [!IMPORTANT]
+> To use `@DatabaseHook`, `@BeforeDatabaseHook`, or `@AfterDatabaseHook`, set `databaseHooks: {}` (empty object) in your `betterAuth(...)` config so the module can attach your handlers. You can still define your own database hooks directly in the Better Auth options; `databaseHooks: {}` is just the minimum required.
+
+Use these decorators to bind NestJS providers to Better Auth's [database hooks](https://www.better-auth.com/llms.txt/docs/concepts/database.md), allowing you to run logic before or after core model operations (`user`, `session`, `account`, `verification`):
+
+```ts title="hooks/session-database.hook.ts"
+import { Injectable } from "@nestjs/common";
+import {
+  DatabaseHook,
+  BeforeDatabaseHook,
+  AfterDatabaseHook,
+} from "@thallesp/nestjs-better-auth";
+import type { Session } from "better-auth";
+
+@DatabaseHook()
+@Injectable()
+export class SessionDatabaseHook {
+  @BeforeDatabaseHook("session", "create")
+  async addOrganizationMetadata(session: Session) {
+    return {
+      data: {
+        ...session,
+        activeOrganizationId: "org_123",
+      },
+    };
+  }
+
+  @AfterDatabaseHook("session", "create")
+  async notify(session: Session) {
+    console.log("Session created:", session.id);
+  }
+}
+```
+
+Register the hook provider alongside `AuthModule`:
+
+```ts title="app.module.ts"
+@Module({
+  imports: [AuthModule.forRoot({ auth })],
+  providers: [SessionDatabaseHook],
+})
+export class AppModule {}
+```
+
 ## AuthService
 
 The `AuthService` is automatically provided by the `AuthModule` and can be injected into your controllers to access the Better Auth instance and its API endpoints.
