@@ -349,3 +349,21 @@ The available options are:
 | `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. Use this if you want to handle CORS configuration manually. |
 | `disableBodyParser`         | `false` | When set to `true`, disables the automatic body parser middleware. Use this if you want to handle request body parsing manually.                                         |
 | `disableGlobalAuthGuard`    | `false` | When set to `true`, does not register `AuthGuard` as a global guard. Use this if you prefer to apply `AuthGuard` manually or register it yourself via `APP_GUARD`.       |
+| `middleware`                | `undefined` | Optional middleware function that wraps the Better Auth handler. Receives `(req, res, next)` parameters. Useful for integrating with request-scoped libraries like MikroORM's RequestContext. |
+
+### Using Custom Middleware
+
+You can provide a custom middleware function that wraps the Better Auth handler. This is particularly useful when integrating with libraries like MikroORM that require request context:
+
+```typescript
+import { RequestContext } from '@mikro-orm/core';
+
+AuthModule.forRoot({
+  auth,
+  middleware: (req, res, next) => {
+    RequestContext.create(orm.em, next);
+  },
+});
+```
+
+The middleware receives standard Express middleware parameters `(req, res, next)` where `next` is a function that invokes the Better Auth handler.
