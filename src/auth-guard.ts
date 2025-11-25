@@ -18,6 +18,7 @@ import {
 } from "./auth-module-definition.ts";
 import { getRequestFromContext } from "./utils.ts";
 import { WsException } from "@nestjs/websockets";
+import { GraphQLError, GraphQLErrorOptions } from "graphql";
 
 /**
  * Type representing a valid user session after authentication
@@ -39,7 +40,7 @@ const AuthErrorType = {
 } as const;
 
 const AuthContextErrorMap: Record<
-	ContextType,
+	ContextType | "graphql",
 	Record<keyof typeof AuthErrorType, (args?: unknown) => Error>
 > = {
 	http: {
@@ -57,6 +58,34 @@ const AuthContextErrorMap: Record<
 					message: "Insufficient permissions",
 				},
 			),
+	},
+	graphql: {
+		UNAUTHORIZED: (args) => {
+			if (typeof args === "string") {
+				return new GraphQLError(args);
+			} else if (typeof args === "object") {
+				return new GraphQLError(
+					// biome-ignore lint: if `message` is not set, a default is already in place.
+					(args as any)?.message ?? "Forbidden",
+					args as GraphQLErrorOptions,
+				);
+			}
+
+			return new GraphQLError("Unauthorized");
+		},
+		FORBIDDEN: (args) => {
+			if (typeof args === "string") {
+				return new GraphQLError(args);
+			} else if (typeof args === "object") {
+				return new GraphQLError(
+					// biome-ignore lint: if `message` is not set, a default is already in place.
+					(args as any)?.message ?? "Forbidden",
+					args as GraphQLErrorOptions,
+				);
+			}
+
+			return new GraphQLError("Forbidden");
+		},
 	},
 	ws: {
 		UNAUTHORIZED: (args) => new WsException(args ?? "UNAUTHORIZED"),
@@ -111,10 +140,9 @@ export class AuthGuard implements CanActivate {
 			context.getClass(),
 		]);
 
-		if (isOptional && !session) return true;
+		if (!session && isOptional) return true;
 
 		const ctxType = context.getType();
-
 		if (!session) throw AuthContextErrorMap[ctxType].UNAUTHORIZED();
 
 		const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
