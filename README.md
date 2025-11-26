@@ -339,6 +339,8 @@ AuthModule.forRoot({
   auth,
   disableTrustedOriginsCors: false,
   disableBodyParser: false,
+  disableGlobalAuthGuard: false,
+  disableControllers: false,
 });
 ```
 
@@ -349,6 +351,7 @@ The available options are:
 | `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. Use this if you want to handle CORS configuration manually. |
 | `disableBodyParser`         | `false` | When set to `true`, disables the automatic body parser middleware. Use this if you want to handle request body parsing manually.                                         |
 | `disableGlobalAuthGuard`    | `false` | When set to `true`, does not register `AuthGuard` as a global guard. Use this if you prefer to apply `AuthGuard` manually or register it yourself via `APP_GUARD`.       |
+| `disableControllers`        | `false` | When set to `true`, does not register any controllers. Use this if you want to handle routes manually.                                                                   |
 | `middleware`                | `undefined` | Optional middleware function that wraps the Better Auth handler. Receives `(req, res, next)` parameters. Useful for integrating with request-scoped libraries like MikroORM's RequestContext. |
 
 ### Using Custom Middleware

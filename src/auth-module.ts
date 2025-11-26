@@ -92,8 +92,6 @@ export class AuthModule
 	}
 
 	configure(consumer: MiddlewareConsumer): void {
-		if (this.options?.disableControllers) return;
-
 		const trustedOrigins = this.options.auth.options.trustedOrigins;
 		// function-based trustedOrigins requires a Request (from web-apis) object to evaluate, which is not available in NestJS (we only have a express Request object)
 		// if we ever need this, take a look at better-call which show an implementation for this
@@ -174,8 +172,11 @@ export class AuthModule
 
 	static forRootAsync(options: typeof ASYNC_OPTIONS_TYPE): DynamicModule {
 		const forRootAsyncResult = super.forRootAsync(options);
+		const { module } = forRootAsyncResult;
+
 		return {
 			...forRootAsyncResult,
+			module: options.disableControllers ? AuthModuleWithoutControllers : module,
 			controllers: options.disableControllers
 				? []
 				: forRootAsyncResult.controllers,
@@ -211,9 +212,11 @@ export class AuthModule
 				: ({ ...(arg2 ?? {}), auth: arg1 as Auth } as typeof OPTIONS_TYPE);
 
 		const forRootResult = super.forRoot(normalizedOptions);
+		const { module } = forRootResult;
 
 		return {
 			...forRootResult,
+			module: normalizedOptions.disableControllers ? AuthModuleWithoutControllers : module,
 			controllers: normalizedOptions.disableControllers
 				? []
 				: forRootResult.controllers,
@@ -229,5 +232,11 @@ export class AuthModule
 					: []),
 			],
 		};
+	}
+}
+
+class AuthModuleWithoutControllers extends AuthModule {
+	configure(): void {
+		return;
 	}
 }
