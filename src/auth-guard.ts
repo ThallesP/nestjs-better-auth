@@ -17,7 +17,6 @@ import {
 	MODULE_OPTIONS_TOKEN,
 } from "./auth-module-definition.ts";
 import { getRequestFromContext } from "./utils.ts";
-import { WsException } from "@nestjs/websockets";
 import { GraphQLError, GraphQLErrorOptions } from "graphql";
 
 /**
@@ -38,6 +37,23 @@ const AuthErrorType = {
 	UNAUTHORIZED: "UNAUTHORIZED",
 	FORBIDDEN: "FORBIDDEN",
 } as const;
+
+/**
+ * Lazy-load WsException to make @nestjs/websockets an optional dependency
+ */
+let WsException: any;
+function getWsException() {
+	if (!WsException) {
+		try {
+			WsException = require("@nestjs/websockets").WsException;
+		} catch (error) {
+			throw new Error(
+				"@nestjs/websockets is required for WebSocket support. Please install it: npm install @nestjs/websockets @nestjs/platform-socket.io",
+			);
+		}
+	}
+	return WsException;
+}
 
 const AuthContextErrorMap: Record<
 	ContextType | "graphql",
@@ -88,8 +104,14 @@ const AuthContextErrorMap: Record<
 		},
 	},
 	ws: {
-		UNAUTHORIZED: (args) => new WsException(args ?? "UNAUTHORIZED"),
-		FORBIDDEN: (args) => new WsException(args ?? "FORBIDDEN"),
+		UNAUTHORIZED: (args) => {
+			const WsExceptionClass = getWsException();
+			return new WsExceptionClass(args ?? "UNAUTHORIZED");
+		},
+		FORBIDDEN: (args) => {
+			const WsExceptionClass = getWsException();
+			return new WsExceptionClass(args ?? "FORBIDDEN");
+		},
 	},
 	rpc: {
 		UNAUTHORIZED: () => new Error("UNAUTHORIZED"),
