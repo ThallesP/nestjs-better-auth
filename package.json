@@ -18,6 +18,7 @@
 		"lint": "biome lint",
 		"format": "biome format",
 		"check": "biome check",
+		"fix": "biome check --write --unsafe",
 		"test": "vitest"
 	},
 	"types": "dist/index.d.ts",
@@ -68,5 +69,8 @@
 		"express": "^5.1.0",
 		"graphql": "^16.11.0",
 		"typescript": "^5.9.2"
+	},
+	"dependencies": {
+		"@nestjs/platform-fastify": "^11.1.9"
 	}
 }

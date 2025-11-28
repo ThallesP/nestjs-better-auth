@@ -19,6 +19,15 @@ import {
 import { getRequestFromContext } from "./utils.ts";
 import { WsException } from "@nestjs/websockets";
 import type { GqlContextType } from "@nestjs/graphql";
+import type { Request } from "express";
+import type { FastifyRequest } from "fastify";
+
+declare module "@nestjs/common" {
+	interface Request {
+		session?: UserSession | null;
+		user?: UserSession["user"] | null;
+	}
+}
 
 const AuthErrorType = {
 	UNAUTHORIZED: "UNAUTHORIZED",
@@ -100,8 +109,9 @@ export class AuthGuard implements CanActivate {
 
 		// Robust header extraction across HTTP, GraphQL, and WS
 		const headers =
-			(request as any)?.headers ??
-			(request as any)?.handshake?.headers ??
+			(request as Request).headers ??
+			(request as any).handshake?.headers ??
+			(request as FastifyRequest).headers ??
 			{};
 
 		const session: UserSession | null = await this.options.auth.api.getSession({
@@ -109,8 +119,8 @@ export class AuthGuard implements CanActivate {
 		});
 
 		// Attach session and user to the request for all contexts
-		(request as any).session = session;
-		(request as any).user = session?.user ?? null;
+		request.session = session;
+		request.user = session?.user ?? null;
 
 		// Decorator checks
 		const isPublic = this.reflector.getAllAndOverride<boolean>("PUBLIC", [
