@@ -14,6 +14,7 @@ import {
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/plugins";
 import type { Request, Response } from "express";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import {
 	type ASYNC_OPTIONS_TYPE,
 	type AuthModuleOptions,
@@ -64,7 +65,7 @@ export class AuthModule
 		private readonly options: AuthModuleOptions,
 	) {
 		super();
-		this.platform = getPlatform(this.adapter.httpAdapter);
+		this.platform = getPlatform({ httpAdapter: this.adapter.httpAdapter });
 	}
 
 	onModuleInit(): void {
@@ -140,7 +141,10 @@ export class AuthModule
 
 	private createPlatformAwareHandler(
 		basePath: string,
-		handler: (req: Request, res: Response) => Promise<void> | void,
+		handler: (
+			req: IncomingMessage,
+			res: ServerResponse,
+		) => Promise<void> | void,
 	) {
 		if (this.platform === "express") {
 			this.adapter.httpAdapter

@@ -9,6 +9,8 @@ import type {
 	ContextType,
 	ExecutionContext,
 } from "@nestjs/common";
+import type { GraphQLErrorOptions } from "graphql";
+import { GraphQLError } from "graphql";
 import { Reflector } from "@nestjs/core";
 import type { getSession } from "better-auth/api";
 import { fromNodeHeaders } from "better-auth/node";
@@ -18,10 +20,7 @@ import {
 } from "./auth-module-definition.ts";
 import { getRequestFromContext } from "./utils.ts";
 import { WsException } from "@nestjs/websockets";
-import { GraphQLError, GraphQLErrorOptions } from "graphql";
 import type { GqlContextType } from "@nestjs/graphql";
-import type { Request } from "express";
-import type { FastifyRequest } from "fastify";
 
 declare module "@nestjs/common" {
 	interface Request {
@@ -120,6 +119,17 @@ export type UserSession = BaseUserSession & {
  * NestJS guard that handles authentication for protected routes
  * Can be configured with @AllowAnonymous() or @OptionalAuth() decorators to modify authentication behavior
  */
+type NodeHeaders = Record<string, string | string[] | undefined>;
+type HasHeaders = { headers?: NodeHeaders };
+type WsClientWithHandshake = { handshake?: { headers?: NodeHeaders } };
+
+function hasHeaders(obj: unknown): obj is HasHeaders {
+	return !!obj && typeof obj === "object" && "headers" in obj;
+}
+function hasHandshakeHeaders(obj: unknown): obj is WsClientWithHandshake {
+	return !!obj && typeof obj === "object" && "handshake" in obj;
+}
+
 @Injectable()
 export class AuthGuard implements CanActivate {
 	constructor(
@@ -139,11 +149,10 @@ export class AuthGuard implements CanActivate {
 	async canActivate(context: ExecutionContext): Promise<boolean> {
 		const request = getRequestFromContext(context);
 
-		// Robust header extraction across HTTP, GraphQL, and WS
-		const headers =
-			(request as Request).headers ??
-			(request as any).handshake?.headers ??
-			(request as FastifyRequest).headers ??
+		// Robust header extraction across HTTP, GraphQL, and WS without `any`
+		const headers: NodeHeaders =
+			(hasHeaders(request) ? request.headers : undefined) ??
+			(hasHandshakeHeaders(request) ? request.handshake?.headers : undefined) ??
 			{};
 
 		const session: UserSession | null = await this.options.auth.api.getSession({
