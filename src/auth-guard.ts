@@ -18,6 +18,7 @@ import {
 } from "./auth-module-definition.ts";
 import { getRequestFromContext } from "./utils.ts";
 import { WsException } from "@nestjs/websockets";
+import { GraphQLError, GraphQLErrorOptions } from "graphql";
 import type { GqlContextType } from "@nestjs/graphql";
 import type { Request } from "express";
 import type { FastifyRequest } from "fastify";
@@ -35,7 +36,7 @@ const AuthErrorType = {
 } as const;
 
 const AuthContextErrorMap: Record<
-	ContextType,
+	ContextType | "graphql",
 	Record<keyof typeof AuthErrorType, (args?: unknown) => Error>
 > = {
 	http: {
@@ -45,8 +46,39 @@ const AuthContextErrorMap: Record<
 			),
 		FORBIDDEN: (args) =>
 			new ForbiddenException(
-				args ?? { code: "FORBIDDEN", message: "Insufficient permissions" },
+				args ?? {
+					code: "FORBIDDEN",
+					message: "Insufficient permissions",
+				},
 			),
+	},
+	graphql: {
+		UNAUTHORIZED: (args) => {
+			if (typeof args === "string") {
+				return new GraphQLError(args);
+			} else if (typeof args === "object") {
+				return new GraphQLError(
+					// biome-ignore lint: if `message` is not set, a default is already in place.
+					(args as any)?.message ?? "Forbidden",
+					args as GraphQLErrorOptions,
+				);
+			}
+
+			return new GraphQLError("Unauthorized");
+		},
+		FORBIDDEN: (args) => {
+			if (typeof args === "string") {
+				return new GraphQLError(args);
+			} else if (typeof args === "object") {
+				return new GraphQLError(
+					// biome-ignore lint: if `message` is not set, a default is already in place.
+					(args as any)?.message ?? "Forbidden",
+					args as GraphQLErrorOptions,
+				);
+			}
+
+			return new GraphQLError("Forbidden");
+		},
 	},
 	ws: {
 		UNAUTHORIZED: (args?: unknown) =>
@@ -136,7 +168,8 @@ export class AuthGuard implements CanActivate {
 		// Optional routes should always proceed, regardless of session or roles
 		if (isOptional) return true;
 
-		// Normalize context key: treat GraphQL as HTTP for error mapping
+		if (!session && isOptional) return true;
+
 		const ctxType = context.getType();
 		const gqlType = context.getType<GqlContextType>();
 		const ctxKey: ContextType = gqlType === "graphql" ? "http" : ctxType;

@@ -97,6 +97,8 @@ export class AuthModule
 	}
 
 	configure(consumer: MiddlewareConsumer): void {
+		if (this.options?.disableControllers) return;
+
 		const trustedOrigins = this.options.auth.options.trustedOrigins;
 		const isNotFunctionBased = trustedOrigins && Array.isArray(trustedOrigins);
 
@@ -214,7 +216,10 @@ export class AuthModule
 	static forRootAsync(options: typeof ASYNC_OPTIONS_TYPE): DynamicModule {
 		const forRootAsyncResult = super.forRootAsync(options);
 		return {
-			...super.forRootAsync(options),
+			...forRootAsyncResult,
+			controllers: options.disableControllers
+				? []
+				: forRootAsyncResult.controllers,
 			providers: [
 				...(forRootAsyncResult.providers ?? []),
 				...(!options.disableGlobalAuthGuard
@@ -250,6 +255,9 @@ export class AuthModule
 
 		return {
 			...forRootResult,
+			controllers: normalizedOptions.disableControllers
+				? []
+				: forRootResult.controllers,
 			providers: [
 				...(forRootResult.providers ?? []),
 				...(!normalizedOptions.disableGlobalAuthGuard
