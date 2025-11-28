@@ -14,6 +14,7 @@ import {
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/plugins";
 import type { Request, Response } from "express";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import {
 	type ASYNC_OPTIONS_TYPE,
 	type AuthModuleOptions,
@@ -26,6 +27,8 @@ import { SkipBodyParsingMiddleware } from "./middlewares.ts";
 import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
 import { AuthGuard } from "./auth-guard.ts";
 import { APP_GUARD } from "@nestjs/core";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import { getPlatform } from "./utils.ts";
 
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
@@ -49,6 +52,8 @@ export class AuthModule
 	implements NestModule, OnModuleInit
 {
 	private readonly logger = new Logger(AuthModule.name);
+	private readonly platform: "express" | "fastify";
+
 	constructor(
 		@Inject(DiscoveryService)
 		private readonly discoveryService: DiscoveryService,
@@ -60,6 +65,7 @@ export class AuthModule
 		private readonly options: AuthModuleOptions,
 	) {
 		super();
+		this.platform = getPlatform({ httpAdapter: this.adapter.httpAdapter });
 	}
 
 	onModuleInit(): void {
@@ -95,54 +101,93 @@ export class AuthModule
 		if (this.options?.disableControllers) return;
 
 		const trustedOrigins = this.options.auth.options.trustedOrigins;
-		// function-based trustedOrigins requires a Request (from web-apis) object to evaluate, which is not available in NestJS (we only have a express Request object)
-		// if we ever need this, take a look at better-call which show an implementation for this
 		const isNotFunctionBased = trustedOrigins && Array.isArray(trustedOrigins);
 
+		// Handle CORS
 		if (!this.options.disableTrustedOriginsCors && isNotFunctionBased) {
-			this.adapter.httpAdapter.enableCors({
-				origin: trustedOrigins,
-				methods: ["GET", "POST", "PUT", "DELETE"],
-				credentials: true,
-			});
+			if (this.platform === "express") {
+				this.adapter.httpAdapter.enableCors({
+					origin: trustedOrigins,
+					methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+					credentials: true,
+				});
+			}
 		} else if (
 			trustedOrigins &&
 			!this.options.disableTrustedOriginsCors &&
 			!isNotFunctionBased
-		)
+		) {
 			throw new Error(
-				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
+				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS.",
 			);
+		}
 
-		// Get basePath from options or use default
 		let basePath = this.options.auth.options.basePath ?? "/api/auth";
+		if (!basePath.startsWith("/")) basePath = `/${basePath}`;
+		if (basePath.endsWith("/")) basePath = basePath.slice(0, -1);
 
-		// Ensure basePath starts with /
-		if (!basePath.startsWith("/")) {
-			basePath = `/${basePath}`;
-		}
-
-		// Ensure basePath doesn't end with /
-		if (basePath.endsWith("/")) {
-			basePath = basePath.slice(0, -1);
-		}
-
-		if (!this.options.disableBodyParser) {
+		// Apply body parser skip only for Express (invoke factory with basePath)
+		if (!this.options.disableBodyParser && this.platform === "express") {
 			consumer.apply(SkipBodyParsingMiddleware(basePath)).forRoutes("*path");
 		}
 
 		const handler = toNodeHandler(this.options.auth);
-		this.adapter.httpAdapter
-			.getInstance()
-			// little hack to ignore any global prefix
-			// for now i'll just not support a global prefix
-			.use(`${basePath}/*path`, (req: Request, res: Response) => {
-				if (this.options.middleware) {
-					return this.options.middleware(req, res, () => handler(req, res));
-				}
-				return handler(req, res);
+		this.createPlatformAwareHandler(basePath, handler);
+
+		this.logger.log(
+			`AuthModule initialized BetterAuth on '${basePath}/*' with ${this.platform}`,
+		);
+	}
+
+	private createPlatformAwareHandler(
+		basePath: string,
+		handler: (
+			req: IncomingMessage,
+			res: ServerResponse,
+		) => Promise<void> | void,
+	) {
+		if (this.platform === "express") {
+			this.adapter.httpAdapter
+				.getInstance()
+				.use(`${basePath}/*path`, (req: Request, res: Response) =>
+					handler(req, res),
+				);
+		} else {
+			const fastifyInstance =
+				this.adapter.httpAdapter.getInstance() as FastifyInstance;
+
+			fastifyInstance.route({
+				method: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+				url: `${basePath}/*`,
+				onRequest: async (request: FastifyRequest, reply: FastifyReply) => {
+					reply.hijack();
+					const req = request.raw;
+					const res = reply.raw;
+
+					// Ensure headers from Fastify request are properly merged with raw request
+					if (request.headers && req.headers) {
+						// Merge Fastify processed headers with raw headers
+						Object.assign(req.headers, request.headers);
+					}
+
+					await handler(req, res);
+					throw new Error("__HIJACKED__");
+				},
+				onError: async (
+					_request: FastifyRequest,
+					_reply: FastifyReply,
+					error: Error,
+				) => {
+					if (error.message === "__HIJACKED__") {
+						return;
+					}
+					throw error;
+				},
+				handler: async () => {
+					throw new Error("Should not reach handler");
+				},
 			});
-		this.logger.log(`AuthModule initialized BetterAuth on '${basePath}/*'`);
+		}
 	}
 
 	private setupHooks(

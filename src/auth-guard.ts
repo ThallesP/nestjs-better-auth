@@ -9,6 +9,8 @@ import type {
 	ContextType,
 	ExecutionContext,
 } from "@nestjs/common";
+import type { GraphQLErrorOptions } from "graphql";
+import { GraphQLError } from "graphql";
 import { Reflector } from "@nestjs/core";
 import type { getSession } from "better-auth/api";
 import { fromNodeHeaders } from "better-auth/node";
@@ -18,21 +20,14 @@ import {
 } from "./auth-module-definition.ts";
 import { getRequestFromContext } from "./utils.ts";
 import { WsException } from "@nestjs/websockets";
-import { GraphQLError, GraphQLErrorOptions } from "graphql";
+import type { GqlContextType } from "@nestjs/graphql";
 
-/**
- * Type representing a valid user session after authentication
- * Excludes null and undefined values from the session return type
- */
-export type BaseUserSession = NonNullable<
-	Awaited<ReturnType<ReturnType<typeof getSession>>>
->;
-
-export type UserSession = BaseUserSession & {
-	user: BaseUserSession["user"] & {
-		role?: string | string[];
-	};
-};
+declare module "@nestjs/common" {
+	interface Request {
+		session?: UserSession | null;
+		user?: UserSession["user"] | null;
+	}
+}
 
 const AuthErrorType = {
 	UNAUTHORIZED: "UNAUTHORIZED",
@@ -46,10 +41,7 @@ const AuthContextErrorMap: Record<
 	http: {
 		UNAUTHORIZED: (args) =>
 			new UnauthorizedException(
-				args ?? {
-					code: "UNAUTHORIZED",
-					message: "Unauthorized",
-				},
+				args ?? { code: "UNAUTHORIZED", message: "Unauthorized" },
 			),
 		FORBIDDEN: (args) =>
 			new ForbiddenException(
@@ -88,19 +80,56 @@ const AuthContextErrorMap: Record<
 		},
 	},
 	ws: {
-		UNAUTHORIZED: (args) => new WsException(args ?? "UNAUTHORIZED"),
-		FORBIDDEN: (args) => new WsException(args ?? "FORBIDDEN"),
+		UNAUTHORIZED: (args?: unknown) =>
+			new WsException(
+				typeof args === "string" || (args && typeof args === "object")
+					? (args as string | object)
+					: "UNAUTHORIZED",
+			),
+		FORBIDDEN: (args?: unknown) =>
+			new WsException(
+				typeof args === "string" || (args && typeof args === "object")
+					? (args as string | object)
+					: "FORBIDDEN",
+			),
 	},
 	rpc: {
-		UNAUTHORIZED: () => new Error("UNAUTHORIZED"),
-		FORBIDDEN: () => new Error("FORBIDDEN"),
+		UNAUTHORIZED: (args?: unknown) =>
+			new Error(typeof args === "string" ? args : "UNAUTHORIZED"),
+		FORBIDDEN: (args?: unknown) =>
+			new Error(typeof args === "string" ? args : "FORBIDDEN"),
 	},
+};
+
+/**
+ * Type representing a valid user session after authentication
+ * Excludes null and undefined values from the session return type
+ */
+export type BaseUserSession = NonNullable<
+	Awaited<ReturnType<ReturnType<typeof getSession>>>
+>;
+
+export type UserSession = BaseUserSession & {
+	user: BaseUserSession["user"] & {
+		role?: string | string[];
+	};
 };
 
 /**
  * NestJS guard that handles authentication for protected routes
  * Can be configured with @AllowAnonymous() or @OptionalAuth() decorators to modify authentication behavior
  */
+type NodeHeaders = Record<string, string | string[] | undefined>;
+type HasHeaders = { headers?: NodeHeaders };
+type WsClientWithHandshake = { handshake?: { headers?: NodeHeaders } };
+
+function hasHeaders(obj: unknown): obj is HasHeaders {
+	return !!obj && typeof obj === "object" && "headers" in obj;
+}
+function hasHandshakeHeaders(obj: unknown): obj is WsClientWithHandshake {
+	return !!obj && typeof obj === "object" && "handshake" in obj;
+}
+
 @Injectable()
 export class AuthGuard implements CanActivate {
 	constructor(
@@ -119,32 +148,45 @@ export class AuthGuard implements CanActivate {
 	 */
 	async canActivate(context: ExecutionContext): Promise<boolean> {
 		const request = getRequestFromContext(context);
+
+		// Robust header extraction across HTTP, GraphQL, and WS without `any`
+		const headers: NodeHeaders =
+			(hasHeaders(request) ? request.headers : undefined) ??
+			(hasHandshakeHeaders(request) ? request.handshake?.headers : undefined) ??
+			{};
+
 		const session: UserSession | null = await this.options.auth.api.getSession({
-			headers: fromNodeHeaders(
-				request.headers || request?.handshake?.headers || [],
-			),
+			headers: fromNodeHeaders(headers),
 		});
 
+		// Attach session and user to the request for all contexts
 		request.session = session;
-		request.user = session?.user ?? null; // useful for observability tools like Sentry
+		request.user = session?.user ?? null;
 
+		// Decorator checks
 		const isPublic = this.reflector.getAllAndOverride<boolean>("PUBLIC", [
 			context.getHandler(),
 			context.getClass(),
 		]);
-
 		if (isPublic) return true;
 
 		const isOptional = this.reflector.getAllAndOverride<boolean>("OPTIONAL", [
 			context.getHandler(),
 			context.getClass(),
 		]);
+		// Optional routes should always proceed, regardless of session or roles
+		if (isOptional) return true;
 
 		if (!session && isOptional) return true;
 
 		const ctxType = context.getType();
-		if (!session) throw AuthContextErrorMap[ctxType].UNAUTHORIZED();
+		const gqlType = context.getType<GqlContextType>();
+		const ctxKey: ContextType = gqlType === "graphql" ? "http" : ctxType;
 
+		// Require session for non-optional routes
+		if (!session) throw AuthContextErrorMap[ctxKey].UNAUTHORIZED();
+
+		// Role-based access control
 		const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
 			context.getHandler(),
 			context.getClass(),
@@ -153,15 +195,14 @@ export class AuthGuard implements CanActivate {
 		if (requiredRoles && requiredRoles.length > 0) {
 			const userRole = session.user.role;
 			let hasRole = false;
+
 			if (Array.isArray(userRole)) {
 				hasRole = userRole.some((role) => requiredRoles.includes(role));
 			} else if (typeof userRole === "string") {
-				hasRole = userRole
-					.split(",")
-					.some((role) => requiredRoles.includes(role));
+				hasRole = requiredRoles.includes(userRole);
 			}
 
-			if (!hasRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+			if (!hasRole) throw AuthContextErrorMap[ctxKey].FORBIDDEN();
 		}
 
 		return true;

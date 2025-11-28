@@ -1,5 +1,6 @@
 import type { ExecutionContext } from "@nestjs/common";
 import { GqlExecutionContext, type GqlContextType } from "@nestjs/graphql";
+import type { AbstractHttpAdapter } from "@nestjs/core";
 
 /**
  * Extracts the request object from either HTTP, GraphQL or WebSocket execution context
@@ -17,4 +18,30 @@ export function getRequestFromContext(context: ExecutionContext) {
 	}
 
 	return context.switchToHttp().getRequest();
+}
+
+/**
+ * Detects if the current platform adapter is Fastify
+ */
+export function isFastifyAdapter(
+	adapter: AbstractHttpAdapter | null | undefined,
+): boolean {
+	if (!adapter) return false;
+
+	const instance = adapter.getInstance?.();
+	return (
+		adapter.constructor?.name === "FastifyAdapter" ||
+		(instance &&
+			"constructor" in instance &&
+			instance.constructor?.name === "FastifyInstance")
+	);
+}
+
+/**
+ * Returns the platform identifier for the current HTTP adapter
+ */
+export function getPlatform(adapter: {
+	httpAdapter: AbstractHttpAdapter | null;
+}): "express" | "fastify" {
+	return isFastifyAdapter(adapter.httpAdapter) ? "fastify" : "express";
 }
