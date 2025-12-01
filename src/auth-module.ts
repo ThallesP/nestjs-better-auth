@@ -132,16 +132,16 @@ export class AuthModule
 		}
 
 		const handler = toNodeHandler(this.options.auth);
-		this.adapter.httpAdapter
-			.getInstance()
-			// little hack to ignore any global prefix
-			// for now i'll just not support a global prefix
-			.use(`${basePath}/*path`, (req: Request, res: Response) => {
+		consumer
+			.apply((req: Request, res: Response) => {
 				if (this.options.middleware) {
 					return this.options.middleware(req, res, () => handler(req, res));
 				}
 				return handler(req, res);
-			});
+			})
+			// little hack to ignore any global prefix
+			// for now i'll just not support a global prefix
+			.forRoutes(`${basePath}/*path`);
 		this.logger.log(`AuthModule initialized BetterAuth on '${basePath}/*'`);
 	}
 
