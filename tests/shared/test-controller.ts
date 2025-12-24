@@ -33,4 +33,16 @@ export class TestController {
 	adminModeratorProtected(@Request() req: UserSession) {
 		return { user: req.user };
 	}
+
+	@Roles(["owner"])
+	@Get("owner-protected")
+	ownerProtected(@Request() req: UserSession) {
+		return { user: req.user };
+	}
+
+	@Roles(["owner", "admin"])
+	@Get("owner-admin-protected")
+	ownerAdminProtected(@Request() req: UserSession) {
+		return { user: req.user };
+	}
 }
