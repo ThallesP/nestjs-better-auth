@@ -176,7 +176,9 @@ export class AuthModule
 
 		return {
 			...forRootAsyncResult,
-			module: options.disableControllers ? AuthModuleWithoutControllers : module,
+			module: options.disableControllers
+				? AuthModuleWithoutControllers
+				: module,
 			controllers: options.disableControllers
 				? []
 				: forRootAsyncResult.controllers,
@@ -216,7 +218,9 @@ export class AuthModule
 
 		return {
 			...forRootResult,
-			module: normalizedOptions.disableControllers ? AuthModuleWithoutControllers : module,
+			module: normalizedOptions.disableControllers
+				? AuthModuleWithoutControllers
+				: module,
 			controllers: normalizedOptions.disableControllers
 				? []
 				: forRootResult.controllers,

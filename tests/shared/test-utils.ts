@@ -13,9 +13,7 @@ import { TestResolver } from "./test-resolver.ts";
 import { TestGateway } from "./test-gateway.ts";
 import { admin } from "better-auth/plugins/admin";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
-import {
-	type OPTIONS_TYPE,
-} from "../../src/auth-module-definition.ts";
+import { type OPTIONS_TYPE } from "../../src/auth-module-definition.ts";
 
 // Create Better Auth instance factory
 export function createTestAuth() {
@@ -43,9 +41,11 @@ export function createTestAppModule(
 	auth: ReturnType<typeof createTestAuth>,
 	options?: Omit<typeof OPTIONS_TYPE, "auth">,
 ) {
-	const authModule = async ? AuthModule.forRootAsync({
-		useFactory: async () => ({ auth, ...options }),
-	}) : AuthModule.forRoot({ auth, ...options });
+	const authModule = async
+		? AuthModule.forRootAsync({
+				useFactory: async () => ({ auth, ...options }),
+			})
+		: AuthModule.forRoot({ auth, ...options });
 
 	@Module({
 		imports: [
@@ -69,7 +69,10 @@ export function createTestAppModule(
 }
 
 // Factory function to create and configure a test NestJS application
-export async function createTestApp(options?: Omit<typeof OPTIONS_TYPE, "auth">, async = false) {
+export async function createTestApp(
+	options?: Omit<typeof OPTIONS_TYPE, "auth">,
+	async = false,
+) {
 	const auth = createTestAuth();
 	const AppModule = createTestAppModule(async, auth, options);
 
