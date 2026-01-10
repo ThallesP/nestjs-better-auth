@@ -2,7 +2,7 @@ name: Release NPM Package
 
 # on:
   push:
-    branches: [main}
+    branches: [main]
   # release:
   #   types: [published]
 
