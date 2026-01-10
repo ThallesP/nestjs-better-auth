@@ -174,6 +174,33 @@ export class AdminController {
 }
 ```
 
+### Organization Plugin Support
+
+The `@Roles` decorator is fully compatible with Better Auth's [organization plugin](https://www.better-auth.com/docs/plugins/organization). When a user has an active organization (`activeOrganizationId` in their session), the guard automatically checks the user's role in that organization.
+
+Role checking uses **OR logic**:
+- Access is granted if the user has the required role in `user.role` (user-level role)
+- **OR** if the user has the required role in their active organization (member role)
+
+This means a global admin (`user.role = 'admin'`) can access admin-protected routes regardless of their organization role, and organization admins can access routes when in their organization context.
+
+```ts title="user.controller.ts"
+@Controller("org")
+export class OrgController {
+  @Roles(["owner", "admin"])
+  @Get("settings")
+  async getOrgSettings(@Session() session: UserSession) {
+    // Accessible by:
+    // - Users with user.role = 'owner' or 'admin'
+    // - Organization members with role = 'owner' or 'admin' (when activeOrganizationId is set)
+    return { orgId: session.session.activeOrganizationId };
+  }
+}
+```
+
+> [!NOTE]
+> The `@Roles` decorator accepts any role strings you define. Better Auth's organization plugin provides default roles (`owner`, `admin`, `member`), but you can configure custom roles. The organization creator automatically gets the `owner` role.
+
 ### Hook Decorators
 
 > [!IMPORTANT]
