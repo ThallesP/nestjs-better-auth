@@ -34,5 +34,8 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      - name: version
+        run: bunx npm --version
+
       - name: Release to NPM
         run: bunx npm publish --access public
