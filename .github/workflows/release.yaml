@@ -1,6 +1,6 @@
 name: Release NPM Package
 
-# on:
+on:
   push:
     branches: [main]
   # release:
