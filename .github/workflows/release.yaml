@@ -35,4 +35,4 @@ jobs:
         run: bun run test
 
       - name: Release to NPM
-        run: bun publish --access public
+        run: bunx npm publish --access public
