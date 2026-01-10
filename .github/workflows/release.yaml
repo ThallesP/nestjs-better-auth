@@ -1,8 +1,10 @@
 name: Release NPM Package
 
-on:
-  release:
-    types: [published]
+# on:
+  push:
+    branches: [main}
+  # release:
+  #   types: [published]
 
 permissions:
   id-token: write
