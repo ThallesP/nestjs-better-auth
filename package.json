@@ -4,10 +4,6 @@
 	"description": "Better Auth for NestJS",
 	"author": "Thalles Passos",
 	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/thallesp/nestjs-better-auth.git"
-	},
 	"keywords": [
 		"nestjs",
 		"better-auth",
