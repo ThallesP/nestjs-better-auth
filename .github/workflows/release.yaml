@@ -45,6 +45,6 @@ jobs:
         run: bun run test
 
       - name: Release to NPM
-        run: pnpm publish --provenance --access public --no-git-checks
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
