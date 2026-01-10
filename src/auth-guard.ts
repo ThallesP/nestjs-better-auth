@@ -41,12 +41,13 @@ const AuthErrorType = {
 /**
  * Lazy-load WsException to make @nestjs/websockets an optional dependency
  */
+// biome-ignore lint/suspicious/noExplicitAny: WsException type comes from optional @nestjs/websockets dependency
 let WsException: any;
 function getWsException() {
 	if (!WsException) {
 		try {
 			WsException = require("@nestjs/websockets").WsException;
-		} catch (error) {
+		} catch (_error) {
 			throw new Error(
 				"@nestjs/websockets is required for WebSocket support. Please install it: npm install @nestjs/websockets @nestjs/platform-socket.io",
 			);
