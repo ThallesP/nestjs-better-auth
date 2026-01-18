@@ -171,22 +171,34 @@ export class AuthGuard implements CanActivate {
 		const ctxType = context.getType();
 		if (!session) throw AuthContextErrorMap[ctxType].UNAUTHORIZED();
 
+		const headers = fromNodeHeaders(
+			request.headers || request?.handshake?.headers || [],
+		);
+
+		// Check @Roles() - user.role only (admin plugin)
 		const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
 			context.getHandler(),
 			context.getClass(),
 		]);
 
 		if (requiredRoles && requiredRoles.length > 0) {
-			const headers = fromNodeHeaders(
-				request.headers || request?.handshake?.headers || [],
-			);
-			const hasRole = await this.checkUserHasRequiredRole(
+			const hasRole = this.checkUserRole(session, requiredRoles);
+			if (!hasRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+		}
+
+		// Check @OrgRoles() - organization member role only
+		const requiredOrgRoles = this.reflector.getAllAndOverride<string[]>(
+			"ORG_ROLES",
+			[context.getHandler(), context.getClass()],
+		);
+
+		if (requiredOrgRoles && requiredOrgRoles.length > 0) {
+			const hasOrgRole = await this.checkOrgRole(
 				session,
 				headers,
-				requiredRoles,
+				requiredOrgRoles,
 			);
-
-			if (!hasRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+			if (!hasOrgRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
 		}
 
 		return true;
@@ -250,33 +262,39 @@ export class AuthGuard implements CanActivate {
 	}
 
 	/**
-	 * Checks if the user has any of the required roles using OR logic
-	 * Checks both user.role AND organization member role (if in org context)
-	 * Access is granted if the user has the required role in EITHER location
+	 * Checks if the user has any of the required roles in user.role only.
+	 * Used by @Roles() decorator for system-level role checks (admin plugin).
+	 * @param session - The user's session
+	 * @param requiredRoles - Array of roles that grant access
+	 * @returns True if user.role matches any required role
+	 */
+	private checkUserRole(
+		session: UserSession,
+		requiredRoles: string[],
+	): boolean {
+		return this.matchesRequiredRole(session.user.role, requiredRoles);
+	}
+
+	/**
+	 * Checks if the user has any of the required roles in their organization.
+	 * Used by @OrgRoles() decorator for organization-level role checks.
+	 * Requires an active organization in the session.
 	 * @param session - The user's session
 	 * @param headers - The request headers for API calls
 	 * @param requiredRoles - Array of roles that grant access
-	 * @returns True if the user has any required role
+	 * @returns True if org member role matches any required role
 	 */
-	private async checkUserHasRequiredRole(
+	private async checkOrgRole(
 		session: UserSession,
 		headers: Headers,
 		requiredRoles: string[],
 	): Promise<boolean> {
-		// Check user-level role (existing behavior)
-		if (this.matchesRequiredRole(session.user.role, requiredRoles)) {
-			return true;
-		}
-
-		// Check organization member role if in organization context
 		const activeOrgId = session.session?.activeOrganizationId;
-		if (activeOrgId) {
-			const memberRole = await this.getMemberRoleInOrganization(headers);
-			if (this.matchesRequiredRole(memberRole, requiredRoles)) {
-				return true;
-			}
+		if (!activeOrgId) {
+			return false;
 		}
 
-		return false;
+		const memberRole = await this.getMemberRoleInOrganization(headers);
+		return this.matchesRequiredRole(memberRole, requiredRoles);
 	}
 }

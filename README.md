@@ -115,17 +115,13 @@ export class UserController {
 }
 ```
 
-### AllowAnonymous, OptionalAuth, and Roles Decorators
+### AllowAnonymous and OptionalAuth Decorators
 
-Control authentication/authorization requirements for specific routes:
+Control authentication requirements for specific routes:
 
 ```ts title="app.controller.ts"
 import { Controller, Get } from "@nestjs/common";
-import {
-  AllowAnonymous,
-  OptionalAuth,
-  Roles,
-} from "@thallesp/nestjs-better-auth";
+import { AllowAnonymous, OptionalAuth } from "@thallesp/nestjs-better-auth";
 
 @Controller("users")
 export class UserController {
@@ -140,66 +136,93 @@ export class UserController {
   async optionalRoute(@Session() session: UserSession) {
     return { authenticated: !!session, session };
   }
-
-  @Get("admin")
-  @Roles(["admin"]) // Only authenticated users with the 'admin' role can access this route. Uses the access control plugin from better-auth.
-  adminRoute() {
-    return "Only admins can see this";
-  }
 }
 ```
 
-Alternatively, use it as a class decorator to specify access for an entire controller:
+Alternatively, use as a class decorator for an entire controller:
 
 ```ts title="app.controller.ts"
-import { Controller, Get } from "@nestjs/common";
-import { AllowAnonymous, OptionalAuth } from "@thallesp/nestjs-better-auth";
-
 @AllowAnonymous() // All routes inside this controller are public
 @Controller("public")
 export class PublicController {
   /* */
 }
 
-@OptionalAuth() // Authentication is optional for all routes inside this controller
+@OptionalAuth() // Authentication is optional for all routes
 @Controller("optional")
 export class OptionalController {
   /* */
 }
+```
 
-@Roles(["admin"]) // All routes inside this controller require 'admin' role. Uses the access control plugin from better-auth.
+### Role-Based Access Control
+
+This library provides two role decorators for different use cases:
+
+| Decorator | Checks | Use Case |
+|-----------|--------|----------|
+| `@Roles()` | `user.role` only | System-level roles ([admin plugin](https://www.better-auth.com/docs/plugins/admin)) |
+| `@OrgRoles()` | Organization member role only | Organization-level roles ([organization plugin](https://www.better-auth.com/docs/plugins/organization)) |
+
+> [!IMPORTANT]
+> These decorators are intentionally **separate** to prevent privilege escalation. The `@Roles()` decorator only checks `user.role` and does **not** check organization member roles. This ensures an organization admin cannot bypass system-level admin protection.
+
+#### @Roles() - System-Level Roles
+
+Use `@Roles()` for system-wide admin protection. This checks only the `user.role` field from Better Auth's [admin plugin](https://www.better-auth.com/docs/plugins/admin).
+
+```ts title="admin.controller.ts"
+import { Controller, Get } from "@nestjs/common";
+import { Roles } from "@thallesp/nestjs-better-auth";
+
 @Controller("admin")
 export class AdminController {
-  /* */
+  @Roles(["admin"])
+  @Get("dashboard")
+  async adminDashboard() {
+    // Only users with user.role = 'admin' can access
+    // Organization admins CANNOT access this route
+    return { message: "System admin dashboard" };
+  }
+}
+
+// Or as a class decorator
+@Roles(["admin"])
+@Controller("admin")
+export class AdminController {
+  /* All routes require user.role = 'admin' */
 }
 ```
 
-### Organization Plugin Support
+#### @OrgRoles() - Organization-Level Roles
 
-The `@Roles` decorator is fully compatible with Better Auth's [organization plugin](https://www.better-auth.com/docs/plugins/organization). When a user has an active organization (`activeOrganizationId` in their session), the guard automatically checks the user's role in that organization.
+Use `@OrgRoles()` for organization-scoped protection. This checks only the organization member role and requires an active organization (`activeOrganizationId` in session).
 
-Role checking uses **OR logic**:
-- Access is granted if the user has the required role in `user.role` (user-level role)
-- **OR** if the user has the required role in their active organization (member role)
+```ts title="org.controller.ts"
+import { Controller, Get } from "@nestjs/common";
+import { OrgRoles, Session, UserSession } from "@thallesp/nestjs-better-auth";
 
-This means a global admin (`user.role = 'admin'`) can access admin-protected routes regardless of their organization role, and organization admins can access routes when in their organization context.
-
-```ts title="user.controller.ts"
 @Controller("org")
 export class OrgController {
-  @Roles(["owner", "admin"])
+  @OrgRoles(["owner", "admin"])
   @Get("settings")
   async getOrgSettings(@Session() session: UserSession) {
-    // Accessible by:
-    // - Users with user.role = 'owner' or 'admin'
-    // - Organization members with role = 'owner' or 'admin' (when activeOrganizationId is set)
+    // Only org owners/admins can access (requires activeOrganizationId)
+    // System admins (user.role = 'admin') CANNOT access without org context
     return { orgId: session.session.activeOrganizationId };
+  }
+
+  @OrgRoles(["owner"])
+  @Get("billing")
+  async getOrgBilling() {
+    // Only org owners can access
+    return { message: "Billing settings" };
   }
 }
 ```
 
 > [!NOTE]
-> The `@Roles` decorator accepts any role strings you define. Better Auth's organization plugin provides default roles (`owner`, `admin`, `member`), but you can configure custom roles. The organization creator automatically gets the `owner` role.
+> Both role decorators accept any role strings you define. Better Auth's organization plugin provides default roles (`owner`, `admin`, `member`), but you can configure custom roles. The organization creator automatically gets the `owner` role.
 
 ### Hook Decorators
 

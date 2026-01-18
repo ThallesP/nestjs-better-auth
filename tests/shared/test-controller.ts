@@ -1,5 +1,10 @@
 import { Controller, Get, Request } from "@nestjs/common";
-import { OptionalAuth, AllowAnonymous, Roles } from "../../src/decorators.ts";
+import {
+	OptionalAuth,
+	AllowAnonymous,
+	Roles,
+	OrgRoles,
+} from "../../src/decorators.ts";
 import type { UserSession } from "../../src/auth-guard.ts";
 
 // Simple controller with one protected route and one public route
@@ -34,15 +39,16 @@ export class TestController {
 		return { user: req.user };
 	}
 
-	@Roles(["owner"])
-	@Get("owner-protected")
-	ownerProtected(@Request() req: UserSession) {
+	// Organization-level role checks (OrgRoles)
+	@OrgRoles(["owner"])
+	@Get("org-owner-protected")
+	orgOwnerProtected(@Request() req: UserSession) {
 		return { user: req.user };
 	}
 
-	@Roles(["owner", "admin"])
-	@Get("owner-admin-protected")
-	ownerAdminProtected(@Request() req: UserSession) {
+	@OrgRoles(["owner", "admin"])
+	@Get("org-owner-admin-protected")
+	orgOwnerAdminProtected(@Request() req: UserSession) {
 		return { user: req.user };
 	}
 }

@@ -20,13 +20,36 @@ export const OptionalAuth = (): CustomDecorator<string> =>
 	SetMetadata("OPTIONAL", true);
 
 /**
- * Specifies the roles required to access a route or controller.
- * The AuthGuard will check if the authenticated user's roles
- * include at least one of the specified roles.
+ * Specifies the user-level roles required to access a route or controller.
+ * Checks ONLY the `user.role` field (from Better Auth's admin plugin).
+ * Does NOT check organization member roles.
+ *
+ * Use this for system-wide admin protection (e.g., superadmin routes).
+ *
  * @param roles - The roles required for access
+ * @example
+ * ```ts
+ * @Roles(['admin'])  // Only users with user.role = 'admin' can access
+ * ```
  */
 export const Roles = (roles: string[]): CustomDecorator =>
 	SetMetadata("ROLES", roles);
+
+/**
+ * Specifies the organization-level roles required to access a route or controller.
+ * Checks ONLY the organization member role (from Better Auth's organization plugin).
+ * Requires an active organization (`activeOrganizationId` in session).
+ *
+ * Use this for organization-scoped protection (e.g., org admin routes).
+ *
+ * @param roles - The organization roles required for access
+ * @example
+ * ```ts
+ * @OrgRoles(['owner', 'admin'])  // Only org owners/admins can access
+ * ```
+ */
+export const OrgRoles = (roles: string[]): CustomDecorator =>
+	SetMetadata("ORG_ROLES", roles);
 
 /**
  * @deprecated Use AllowAnonymous() instead.
