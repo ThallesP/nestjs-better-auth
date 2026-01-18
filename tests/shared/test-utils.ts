@@ -13,10 +13,7 @@ import { TestResolver } from "./test-resolver.ts";
 import { TestGateway } from "./test-gateway.ts";
 import { admin } from "better-auth/plugins/admin";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
-import {
-	AuthModuleOptions,
-	OPTIONS_TYPE,
-} from "../../src/auth-module-definition.ts";
+import { type OPTIONS_TYPE } from "../../src/auth-module-definition.ts";
 
 // Create Better Auth instance factory
 export function createTestAuth() {
@@ -40,12 +37,19 @@ export function createTestAuth() {
 
 // Test app module factory
 export function createTestAppModule(
+	async: boolean,
 	auth: ReturnType<typeof createTestAuth>,
 	options?: Omit<typeof OPTIONS_TYPE, "auth">,
 ) {
+	const authModule = async
+		? AuthModule.forRootAsync({
+				useFactory: async () => ({ auth, ...options }),
+			})
+		: AuthModule.forRoot({ auth, ...options });
+
 	@Module({
 		imports: [
-			AuthModule.forRoot({ auth, ...options }),
+			authModule,
 			GraphQLModule.forRoot<ApolloDriverConfig>({
 				driver: ApolloDriver,
 				autoSchemaFile: true,
@@ -65,9 +69,12 @@ export function createTestAppModule(
 }
 
 // Factory function to create and configure a test NestJS application
-export async function createTestApp(options?: Omit<AuthModuleOptions, "auth">) {
+export async function createTestApp(
+	options?: Omit<typeof OPTIONS_TYPE, "auth">,
+	async = false,
+) {
 	const auth = createTestAuth();
-	const AppModule = createTestAppModule(auth, options);
+	const AppModule = createTestAppModule(async, auth, options);
 
 	const moduleRef = await Test.createTestingModule({
 		imports: [AppModule],

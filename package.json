@@ -1,10 +1,9 @@
 {
 	"name": "@thallesp/nestjs-better-auth",
-	"version": "2.2.0",
+	"version": "2.2.2",
 	"description": "Better Auth for NestJS",
 	"author": "Thalles Passos",
 	"license": "MIT",
-	"repository": "https://github.com/thallesp/nestjs-better-auth",
 	"keywords": [
 		"nestjs",
 		"better-auth",

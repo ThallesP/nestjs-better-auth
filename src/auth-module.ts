@@ -92,8 +92,6 @@ export class AuthModule
 	}
 
 	configure(consumer: MiddlewareConsumer): void {
-		if (this.options?.disableControllers) return;
-
 		const trustedOrigins = this.options.auth.options.trustedOrigins;
 		// function-based trustedOrigins requires a Request (from web-apis) object to evaluate, which is not available in NestJS (we only have a express Request object)
 		// if we ever need this, take a look at better-call which show an implementation for this
@@ -128,21 +126,19 @@ export class AuthModule
 		}
 
 		if (!this.options.disableBodyParser) {
-			consumer.apply(SkipBodyParsingMiddleware(basePath)).forRoutes("*path");
+			consumer.apply(SkipBodyParsingMiddleware(basePath)).forRoutes("*");
 		}
 
 		const handler = toNodeHandler(this.options.auth);
 		this.adapter.httpAdapter
 			.getInstance()
-			// little hack to ignore any global prefix
-			// for now i'll just not support a global prefix
-			.use(`${basePath}/*path`, (req: Request, res: Response) => {
+			.use(basePath, (req: Request, res: Response) => {
 				if (this.options.middleware) {
 					return this.options.middleware(req, res, () => handler(req, res));
 				}
 				return handler(req, res);
 			});
-		this.logger.log(`AuthModule initialized BetterAuth on '${basePath}/*'`);
+		this.logger.log(`AuthModule initialized BetterAuth on '${basePath}'`);
 	}
 
 	private setupHooks(
@@ -174,8 +170,13 @@ export class AuthModule
 
 	static forRootAsync(options: typeof ASYNC_OPTIONS_TYPE): DynamicModule {
 		const forRootAsyncResult = super.forRootAsync(options);
+		const { module } = forRootAsyncResult;
+
 		return {
 			...forRootAsyncResult,
+			module: options.disableControllers
+				? AuthModuleWithoutControllers
+				: module,
 			controllers: options.disableControllers
 				? []
 				: forRootAsyncResult.controllers,
@@ -211,9 +212,13 @@ export class AuthModule
 				: ({ ...(arg2 ?? {}), auth: arg1 as Auth } as typeof OPTIONS_TYPE);
 
 		const forRootResult = super.forRoot(normalizedOptions);
+		const { module } = forRootResult;
 
 		return {
 			...forRootResult,
+			module: normalizedOptions.disableControllers
+				? AuthModuleWithoutControllers
+				: module,
 			controllers: normalizedOptions.disableControllers
 				? []
 				: forRootResult.controllers,
@@ -229,5 +234,11 @@ export class AuthModule
 					: []),
 			],
 		};
+	}
+}
+
+class AuthModuleWithoutControllers extends AuthModule {
+	configure(): void {
+		return;
 	}
 }
