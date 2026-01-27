@@ -1,5 +1,15 @@
 import type { ExecutionContext } from "@nestjs/common";
-import { GqlExecutionContext, type GqlContextType } from "@nestjs/graphql";
+import type { GqlExecutionContext as GqlExecutionContextType } from "@nestjs/graphql";
+
+let GqlExecutionContext: typeof GqlExecutionContextType | undefined;
+
+function getGqlExecutionContext(): typeof GqlExecutionContextType {
+	if (!GqlExecutionContext) {
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		GqlExecutionContext = require("@nestjs/graphql").GqlExecutionContext;
+	}
+	return GqlExecutionContext as typeof GqlExecutionContextType;
+}
 
 /**
  * Extracts the request object from either HTTP, GraphQL or WebSocket execution context
@@ -7,9 +17,9 @@ import { GqlExecutionContext, type GqlContextType } from "@nestjs/graphql";
  * @returns The request object
  */
 export function getRequestFromContext(context: ExecutionContext) {
-	const contextType = context.getType<GqlContextType>();
+	const contextType = context.getType<"graphql" | "ws" | "http">();
 	if (contextType === "graphql") {
-		return GqlExecutionContext.create(context).getContext().req;
+		return getGqlExecutionContext().create(context).getContext().req;
 	}
 
 	if (contextType === "ws") {
