@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "@thallesp/nestjs-better-auth",
@@ -13,6 +14,7 @@
         "@nestjs/platform-express": "^11.1.6",
         "@nestjs/platform-socket.io": "^11.1.6",
         "@nestjs/testing": "^11.1.6",
+        "@nestjs/websockets": "^11.1.6",
         "@swc/cli": "^0.7.8",
         "@swc/core": "^1.13.20",
         "@tsconfig/node22": "^22.0.2",
@@ -40,7 +42,9 @@
         "typescript": "^5.9.2",
       },
       "optionalPeers": [
+        "@nestjs/graphql",
         "@nestjs/websockets",
+        "graphql",
       ],
     },
   },
