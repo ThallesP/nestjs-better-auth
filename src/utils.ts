@@ -5,7 +5,6 @@ let GqlExecutionContext: typeof GqlExecutionContextType | undefined;
 
 function getGqlExecutionContext(): typeof GqlExecutionContextType {
 	if (!GqlExecutionContext) {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		GqlExecutionContext = require("@nestjs/graphql").GqlExecutionContext;
 	}
 	return GqlExecutionContext as typeof GqlExecutionContextType;
