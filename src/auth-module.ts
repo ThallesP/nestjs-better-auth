@@ -130,14 +130,14 @@ export class AuthModule
 		}
 
 		const handler = toNodeHandler(this.options.auth);
-		consumer
-			.apply((req: Request, res: Response) => {
+		this.adapter.httpAdapter
+			.getInstance()
+			.use(basePath, (req: Request, res: Response) => {
 				if (this.options.middleware) {
 					return this.options.middleware(req, res, () => handler(req, res));
 				}
 				return handler(req, res);
-			})
-			.forRoutes(basePath);
+			});
 		this.logger.log(`AuthModule initialized BetterAuth on '${basePath}'`);
 	}
 

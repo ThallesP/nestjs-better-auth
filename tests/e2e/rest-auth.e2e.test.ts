@@ -93,6 +93,43 @@ describe("rest auth e2e", () => {
 		});
 	});
 
+	it("should authenticate with a global prefix", async () => {
+		const prefixedSetup = await createTestApp(undefined, false, {
+			globalPrefix: "v1",
+		});
+
+		try {
+			const signUpResponse = await request(prefixedSetup.app.getHttpServer())
+				// better-auth path should still be /api/auth and not /v1/api/auth
+				// if the user wants to change their path, they should do it via the auth instance.
+				.post("/api/auth/sign-up/email")
+				.set("Content-Type", "application/json")
+				.send({
+					name: faker.person.fullName(),
+					email: faker.internet.email(),
+					password: faker.internet.password({ length: 10 }),
+				})
+				.expect(200);
+
+			const { token, user } = signUpResponse.body ?? {};
+			expect(token).toBeDefined();
+			expect(user?.id).toBeDefined();
+
+			const response = await request(prefixedSetup.app.getHttpServer())
+				.get("/v1/test/protected")
+				.set("Authorization", `Bearer ${token}`)
+				.expect(200);
+
+			expect(response.body).toMatchObject({
+				user: expect.objectContaining({
+					id: user.id,
+				}),
+			});
+		} finally {
+			await prefixedSetup.app.close();
+		}
+	});
+
 	it("should forbid access to admin-protected route without admin role", async () => {
 		const signUp = await testSetup.auth.api.signUpEmail({
 			body: {

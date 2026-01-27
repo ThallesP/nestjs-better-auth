@@ -69,9 +69,14 @@ export function createTestAppModule(
 }
 
 // Factory function to create and configure a test NestJS application
+export interface TestAppOptions {
+	globalPrefix?: string;
+}
+
 export async function createTestApp(
 	options?: Omit<typeof OPTIONS_TYPE, "auth">,
 	async = false,
+	appOptions?: TestAppOptions,
 ) {
 	const auth = createTestAuth();
 	const AppModule = createTestAppModule(async, auth, options);
@@ -83,6 +88,10 @@ export async function createTestApp(
 	const app = moduleRef.createNestApplication(new ExpressAdapter(), {
 		bodyParser: false,
 	});
+
+	if (appOptions?.globalPrefix) {
+		app.setGlobalPrefix(appOptions.globalPrefix);
+	}
 
 	await app.init();
 
