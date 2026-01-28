@@ -293,5 +293,143 @@ describe("organization roles e2e", () => {
 				.set("Authorization", `Bearer ${signUp.token}`)
 				.expect(403);
 		});
+
+		it("should allow access when user has admin role in organization", async () => {
+			// Create org owner
+			const ownerSignUp = await testSetup.auth.api.signUpEmail({
+				body: {
+					name: faker.person.fullName(),
+					email: faker.internet.email(),
+					password: faker.internet.password({ length: 10 }),
+				},
+			});
+
+			// Create admin user
+			const adminPassword = faker.internet.password({ length: 10 });
+			const adminSignUp = await testSetup.auth.api.signUpEmail({
+				body: {
+					name: faker.person.fullName(),
+					email: faker.internet.email(),
+					password: adminPassword,
+				},
+			});
+
+			// biome-ignore lint/suspicious/noExplicitAny: API types vary by plugin
+			const authApi = testSetup.auth.api as any;
+
+			// Owner creates org
+			const org = await authApi.createOrganization({
+				body: {
+					name: "Test Org Admin",
+					slug: `test-org-admin-${Date.now()}`,
+				},
+				headers: {
+					Authorization: `Bearer ${ownerSignUp.token}`,
+				},
+			});
+
+			// Add admin user directly with "admin" role (server-side API)
+			await authApi.addMember({
+				body: {
+					userId: adminSignUp.user.id,
+					organizationId: org.id,
+					role: "admin",
+				},
+			});
+
+			// Admin sets active org
+			await authApi.setActiveOrganization({
+				body: {
+					organizationId: org.id,
+				},
+				headers: {
+					Authorization: `Bearer ${adminSignUp.token}`,
+				},
+			});
+
+			// Admin should be able to access @OrgRoles(['admin']) route
+			const response = await request(testSetup.app.getHttpServer())
+				.get("/test/org-admin-protected")
+				.set("Authorization", `Bearer ${adminSignUp.token}`)
+				.expect(200);
+
+			expect(response.body).toMatchObject({
+				user: expect.objectContaining({
+					id: adminSignUp.user.id,
+				}),
+			});
+		});
+
+		it("should deny access when member role tries to access owner-only route", async () => {
+			// Create org owner
+			const ownerSignUp = await testSetup.auth.api.signUpEmail({
+				body: {
+					name: faker.person.fullName(),
+					email: faker.internet.email(),
+					password: faker.internet.password({ length: 10 }),
+				},
+			});
+
+			// Create member user
+			const memberPassword = faker.internet.password({ length: 10 });
+			const memberSignUp = await testSetup.auth.api.signUpEmail({
+				body: {
+					name: faker.person.fullName(),
+					email: faker.internet.email(),
+					password: memberPassword,
+				},
+			});
+
+			// biome-ignore lint/suspicious/noExplicitAny: API types vary by plugin
+			const authApi = testSetup.auth.api as any;
+
+			// Owner creates org
+			const org = await authApi.createOrganization({
+				body: {
+					name: "Test Org Member",
+					slug: `test-org-member-${Date.now()}`,
+				},
+				headers: {
+					Authorization: `Bearer ${ownerSignUp.token}`,
+				},
+			});
+
+			// Add user directly with "member" role (server-side API)
+			await authApi.addMember({
+				body: {
+					userId: memberSignUp.user.id,
+					organizationId: org.id,
+					role: "member",
+				},
+			});
+
+			// Member sets active org
+			await authApi.setActiveOrganization({
+				body: {
+					organizationId: org.id,
+				},
+				headers: {
+					Authorization: `Bearer ${memberSignUp.token}`,
+				},
+			});
+
+			// Member should be denied from @OrgRoles(['owner']) route
+			await request(testSetup.app.getHttpServer())
+				.get("/test/org-owner-protected")
+				.set("Authorization", `Bearer ${memberSignUp.token}`)
+				.expect(403);
+
+			// But member should be able to access @OrgRoles(['member']) route
+			const response = await request(testSetup.app.getHttpServer())
+				.get("/test/org-member-protected")
+				.set("Authorization", `Bearer ${memberSignUp.token}`)
+				.expect(200);
+
+			expect(response.body).toMatchObject({
+				user: expect.objectContaining({
+					id: memberSignUp.user.id,
+				}),
+			});
+		});
 	});
 });

@@ -51,4 +51,16 @@ export class TestController {
 	orgOwnerAdminProtected(@Request() req: UserSession) {
 		return { user: req.user };
 	}
+
+	@OrgRoles(["admin"])
+	@Get("org-admin-protected")
+	orgAdminProtected(@Request() req: UserSession) {
+		return { user: req.user };
+	}
+
+	@OrgRoles(["member"])
+	@Get("org-member-protected")
+	orgMemberProtected(@Request() req: UserSession) {
+		return { user: req.user };
+	}
 }

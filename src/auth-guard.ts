@@ -255,9 +255,9 @@ export class AuthGuard implements CanActivate {
 			}
 
 			return undefined;
-		} catch {
-			// Organization plugin not available or API call failed
-			return undefined;
+		} catch (error) {
+			// Re-throw to surface organization plugin errors
+			throw error;
 		}
 	}
 
@@ -294,7 +294,14 @@ export class AuthGuard implements CanActivate {
 			return false;
 		}
 
-		const memberRole = await this.getMemberRoleInOrganization(headers);
-		return this.matchesRequiredRole(memberRole, requiredRoles);
+		try {
+			const memberRole = await this.getMemberRoleInOrganization(headers);
+			return this.matchesRequiredRole(memberRole, requiredRoles);
+		} catch (error) {
+			// Log error for debugging but return false to trigger 403 Forbidden
+			// instead of letting the error propagate as a 500
+			console.error("Organization plugin error:", error);
+			return false;
+		}
 	}
 }
