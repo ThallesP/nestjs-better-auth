@@ -136,7 +136,7 @@ export class AuthModule
 			);
 
 		if (!this.options.disableBodyParser) {
-			consumer.apply(SkipBodyParsingMiddleware(this.basePath)).forRoutes("*");
+			consumer.apply(SkipBodyParsingMiddleware(this.basePath)).forRoutes("*path");
 		}
 
 		const handler = toNodeHandler(this.options.auth);
