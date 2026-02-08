@@ -50,6 +50,11 @@ async function bootstrap() {
 bootstrap();
 ```
 
+> [!IMPORTANT]
+> **Side Effect:** Since we disable NestJS's built-in body parser, the `rawBody: true` option in `NestFactory.create()` has no effect.
+> If you need access to `req.rawBody` (e.g., for webhook signature verification), use the `enableRawBodyParser` option in `AuthModule.forRoot()` instead.
+> See [Module Options](#module-options) for details.
+
 > [!WARNING]  
 > Currently the library has beta support for Fastify, if you experience any issues with it, please open an issue.
 
@@ -389,6 +394,7 @@ AuthModule.forRoot({
   auth,
   disableTrustedOriginsCors: false,
   disableBodyParser: false,
+  enableRawBodyParser: false,
   disableGlobalAuthGuard: false,
   disableControllers: false,
 });
@@ -400,6 +406,7 @@ The available options are:
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. Use this if you want to handle CORS configuration manually. |
 | `disableBodyParser`         | `false` | When set to `true`, disables the automatic body parser middleware. Use this if you want to handle request body parsing manually.                                         |
+| `enableRawBodyParser`       | `false` | When set to `true`, enables raw body parsing and attaches the raw buffer to `req.rawBody`. Use this for webhook signature verification. **Note:** Since this library disables NestJS's built-in body parser, NestJS's `rawBody: true` option has no effect - use this option instead. |
 | `disableGlobalAuthGuard`    | `false` | When set to `true`, does not register `AuthGuard` as a global guard. Use this if you prefer to apply `AuthGuard` manually or register it yourself via `APP_GUARD`.       |
 | `disableControllers`        | `false` | When set to `true`, does not register any controllers. Use this if you want to handle routes manually.                                                                   |
 | `middleware`                | `undefined` | Optional middleware function that wraps the Better Auth handler. Receives `(req, res, next)` parameters. Useful for integrating with request-scoped libraries like MikroORM's RequestContext. |
