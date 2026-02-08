@@ -6,6 +6,7 @@ import type {
 	OnModuleInit,
 } from "@nestjs/common";
 import {
+	ApplicationConfig,
 	DiscoveryModule,
 	DiscoveryService,
 	HttpAdapterHost,
@@ -26,6 +27,8 @@ import { SkipBodyParsingMiddleware } from "./middlewares.ts";
 import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
 import { AuthGuard } from "./auth-guard.ts";
 import { APP_GUARD } from "@nestjs/core";
+import { normalizePath } from "@nestjs/common/utils/shared.utils.js";
+import { mapToExcludeRoute } from "@nestjs/core/middleware/utils.js";
 
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
@@ -49,7 +52,11 @@ export class AuthModule
 	implements NestModule, OnModuleInit
 {
 	private readonly logger = new Logger(AuthModule.name);
+	private readonly basePath: string;
+
 	constructor(
+		@Inject(ApplicationConfig)
+		private readonly applicationConfig: ApplicationConfig,
 		@Inject(DiscoveryService)
 		private readonly discoveryService: DiscoveryService,
 		@Inject(MetadataScanner)
@@ -60,6 +67,22 @@ export class AuthModule
 		private readonly options: AuthModuleOptions,
 	) {
 		super();
+
+		// Get basePath from options or use default
+		// - Ensure basePath starts with /
+		// - Ensure basePath doesn't end with /
+		this.basePath = normalizePath(
+			this.options.auth.options.basePath ?? "/api/auth",
+		);
+
+		// Add exclusion to global prefix for Better Auth routes
+		const globalPrefixOptions = this.applicationConfig.getGlobalPrefixOptions();
+		this.applicationConfig.setGlobalPrefixOptions({
+			exclude: [
+				...(globalPrefixOptions.exclude ?? []),
+				...mapToExcludeRoute([this.basePath]),
+			],
+		});
 	}
 
 	onModuleInit(): void {
@@ -112,33 +135,20 @@ export class AuthModule
 				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
 			);
 
-		// Get basePath from options or use default
-		let basePath = this.options.auth.options.basePath ?? "/api/auth";
-
-		// Ensure basePath starts with /
-		if (!basePath.startsWith("/")) {
-			basePath = `/${basePath}`;
-		}
-
-		// Ensure basePath doesn't end with /
-		if (basePath.endsWith("/")) {
-			basePath = basePath.slice(0, -1);
-		}
-
 		if (!this.options.disableBodyParser) {
-			consumer.apply(SkipBodyParsingMiddleware(basePath)).forRoutes("*");
+			consumer.apply(SkipBodyParsingMiddleware(this.basePath)).forRoutes("*");
 		}
 
 		const handler = toNodeHandler(this.options.auth);
-		this.adapter.httpAdapter
-			.getInstance()
-			.use(basePath, (req: Request, res: Response) => {
+		consumer
+			.apply((req: Request, res: Response) => {
 				if (this.options.middleware) {
 					return this.options.middleware(req, res, () => handler(req, res));
 				}
 				return handler(req, res);
-			});
-		this.logger.log(`AuthModule initialized BetterAuth on '${basePath}'`);
+			})
+			.forRoutes(this.basePath);
+		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
 	}
 
 	private setupHooks(
