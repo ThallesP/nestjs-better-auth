@@ -31,7 +31,7 @@
 		"dist"
 	],
 	"devDependencies": {
-		"@apollo/server": "^4.12.2",
+		"@apollo/server": "^5.0.0",
 		"@as-integrations/express5": "^1.1.2",
 		"@biomejs/biome": "2.2.4",
 		"@faker-js/faker": "^10.0.0",

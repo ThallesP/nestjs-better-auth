@@ -1,13 +1,13 @@
+import type {
+	CanActivate,
+	ContextType,
+	ExecutionContext,
+} from "@nestjs/common";
 import {
 	ForbiddenException,
 	Inject,
 	Injectable,
 	UnauthorizedException,
-} from "@nestjs/common";
-import type {
-	CanActivate,
-	ContextType,
-	ExecutionContext,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { getSession } from "better-auth/api";
@@ -17,7 +17,25 @@ import {
 	MODULE_OPTIONS_TOKEN,
 } from "./auth-module-definition.ts";
 import { getRequestFromContext } from "./utils.ts";
-import { GraphQLError, GraphQLErrorOptions } from "graphql";
+
+/**
+ * Lazy-load GraphQLError to make graphql an optional dependency
+ */
+
+// biome-ignore lint/suspicious/noExplicitAny: GraphQLError type comes from optional graphql dependency
+let GraphQLErrorClass: any;
+function getGraphQLError() {
+	if (!GraphQLErrorClass) {
+		try {
+			GraphQLErrorClass = require("graphql").GraphQLError;
+		} catch (_error) {
+			throw new Error(
+				"graphql is required for GraphQL support. Please install it: npm install graphql",
+			);
+		}
+	}
+	return GraphQLErrorClass;
+}
 
 /**
  * Type representing a valid user session after authentication
@@ -78,26 +96,28 @@ const AuthContextErrorMap: Record<
 	},
 	graphql: {
 		UNAUTHORIZED: (args) => {
+			const GraphQLError = getGraphQLError();
 			if (typeof args === "string") {
 				return new GraphQLError(args);
 			} else if (typeof args === "object") {
 				return new GraphQLError(
 					// biome-ignore lint: if `message` is not set, a default is already in place.
-					(args as any)?.message ?? "Forbidden",
-					args as GraphQLErrorOptions,
+					(args as any)?.message ?? "Unauthorized",
+					args,
 				);
 			}
 
 			return new GraphQLError("Unauthorized");
 		},
 		FORBIDDEN: (args) => {
+			const GraphQLError = getGraphQLError();
 			if (typeof args === "string") {
 				return new GraphQLError(args);
 			} else if (typeof args === "object") {
 				return new GraphQLError(
 					// biome-ignore lint: if `message` is not set, a default is already in place.
 					(args as any)?.message ?? "Forbidden",
-					args as GraphQLErrorOptions,
+					args,
 				);
 			}
 
