@@ -49,6 +49,9 @@ export type UserSession = BaseUserSession & {
 	user: BaseUserSession["user"] & {
 		role?: string | string[];
 	};
+	session: BaseUserSession["session"] & {
+		activeOrganizationId?: string;
+	};
 };
 
 const AuthErrorType = {
@@ -188,25 +191,137 @@ export class AuthGuard implements CanActivate {
 		const ctxType = context.getType();
 		if (!session) throw AuthContextErrorMap[ctxType].UNAUTHORIZED();
 
+		const headers = fromNodeHeaders(
+			request.headers || request?.handshake?.headers || [],
+		);
+
+		// Check @Roles() - user.role only (admin plugin)
 		const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
 			context.getHandler(),
 			context.getClass(),
 		]);
 
 		if (requiredRoles && requiredRoles.length > 0) {
-			const userRole = session.user.role;
-			let hasRole = false;
-			if (Array.isArray(userRole)) {
-				hasRole = userRole.some((role) => requiredRoles.includes(role));
-			} else if (typeof userRole === "string") {
-				hasRole = userRole
-					.split(",")
-					.some((role) => requiredRoles.includes(role));
-			}
-
+			const hasRole = this.checkUserRole(session, requiredRoles);
 			if (!hasRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
 		}
 
+		// Check @OrgRoles() - organization member role only
+		const requiredOrgRoles = this.reflector.getAllAndOverride<string[]>(
+			"ORG_ROLES",
+			[context.getHandler(), context.getClass()],
+		);
+
+		if (requiredOrgRoles && requiredOrgRoles.length > 0) {
+			const hasOrgRole = await this.checkOrgRole(
+				session,
+				headers,
+				requiredOrgRoles,
+			);
+			if (!hasOrgRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+		}
+
 		return true;
+	}
+
+	/**
+	 * Checks if a role value matches any of the required roles
+	 * Handles both array and comma-separated string role formats
+	 * @param role - The role value to check (string, array, or undefined)
+	 * @param requiredRoles - Array of roles that grant access
+	 * @returns True if the role matches any required role
+	 */
+	private matchesRequiredRole(
+		role: string | string[] | undefined,
+		requiredRoles: string[],
+	): boolean {
+		if (!role) return false;
+
+		if (Array.isArray(role)) {
+			return role.some((r) => requiredRoles.includes(r));
+		}
+
+		if (typeof role === "string") {
+			return role.split(",").some((r) => requiredRoles.includes(r.trim()));
+		}
+
+		return false;
+	}
+
+	/**
+	 * Fetches the user's role within an organization from the member table
+	 * Uses Better Auth's organization plugin API if available
+	 * @param headers - The request headers containing session cookies
+	 * @returns The member's role in the organization, or undefined if not found
+	 */
+	private async getMemberRoleInOrganization(
+		headers: Headers,
+	): Promise<string | undefined> {
+		try {
+			// Better Auth organization plugin exposes getActiveMemberRole or getActiveMember API
+			// biome-ignore lint/suspicious/noExplicitAny: Better Auth API types vary by plugin configuration
+			const authApi = this.options.auth.api as any;
+
+			// Try getActiveMemberRole first (most direct for our use case)
+			if (typeof authApi.getActiveMemberRole === "function") {
+				const result = await authApi.getActiveMemberRole({ headers });
+				return result?.role;
+			}
+
+			// Fallback: try getActiveMember
+			if (typeof authApi.getActiveMember === "function") {
+				const member = await authApi.getActiveMember({ headers });
+				return member?.role;
+			}
+
+			return undefined;
+		} catch (error) {
+			// Re-throw to surface organization plugin errors
+			throw error;
+		}
+	}
+
+	/**
+	 * Checks if the user has any of the required roles in user.role only.
+	 * Used by @Roles() decorator for system-level role checks (admin plugin).
+	 * @param session - The user's session
+	 * @param requiredRoles - Array of roles that grant access
+	 * @returns True if user.role matches any required role
+	 */
+	private checkUserRole(
+		session: UserSession,
+		requiredRoles: string[],
+	): boolean {
+		return this.matchesRequiredRole(session.user.role, requiredRoles);
+	}
+
+	/**
+	 * Checks if the user has any of the required roles in their organization.
+	 * Used by @OrgRoles() decorator for organization-level role checks.
+	 * Requires an active organization in the session.
+	 * @param session - The user's session
+	 * @param headers - The request headers for API calls
+	 * @param requiredRoles - Array of roles that grant access
+	 * @returns True if org member role matches any required role
+	 */
+	private async checkOrgRole(
+		session: UserSession,
+		headers: Headers,
+		requiredRoles: string[],
+	): Promise<boolean> {
+		const activeOrgId = session.session?.activeOrganizationId;
+		if (!activeOrgId) {
+			return false;
+		}
+
+		try {
+			const memberRole = await this.getMemberRoleInOrganization(headers);
+			return this.matchesRequiredRole(memberRole, requiredRoles);
+		} catch (error) {
+			// Log error for debugging but return false to trigger 403 Forbidden
+			// instead of letting the error propagate as a 500
+			console.error("Organization plugin error:", error);
+			return false;
+		}
 	}
 }
