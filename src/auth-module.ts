@@ -137,7 +137,12 @@ export class AuthModule
 
 		if (!this.options.disableBodyParser) {
 			consumer
-				.apply(SkipBodyParsingMiddleware(this.basePath))
+				.apply(
+					SkipBodyParsingMiddleware({
+						basePath: this.basePath,
+						enableRawBodyParser: this.options.enableRawBodyParser,
+					}),
+				)
 				.forRoutes("*path");
 		}
 
