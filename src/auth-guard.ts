@@ -221,6 +221,26 @@ export class AuthGuard implements CanActivate {
 			if (!hasOrgRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
 		}
 
+		// Check @UserHasPermission() - permission-based access control
+		const permissionCheck = this.reflector.getAllAndOverride<
+			| {
+				userId?: string;
+				role?: string;
+				permission?: Record<string, string[]>;
+				permissions?: Record<string, string[]>;
+			}
+			| undefined
+		>("USER_HAS_PERMISSION", [context.getHandler(), context.getClass()]);
+
+		if (permissionCheck) {
+			const hasPermission = await this.checkUserPermission(
+				session,
+				headers,
+				permissionCheck,
+			);
+			if (!hasPermission) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+		}
+
 		return true;
 	}
 
@@ -321,6 +341,83 @@ export class AuthGuard implements CanActivate {
 			// Log error for debugging but return false to trigger 403 Forbidden
 			// instead of letting the error propagate as a 500
 			console.error("Organization plugin error:", error);
+			return false;
+		}
+	}
+
+	/**
+	 * Checks if the user has the required permissions.
+	 * Used by @UserHasPermission() decorator for permission-based access control.
+	 * Calls Better Auth's userHasPermission API to verify permissions.
+	 * @param session - The user's session
+	 * @param headers - The request headers for API calls
+	 * @param permissionCheck - The permission check options
+	 * @returns True if user has the required permissions
+	 */
+	private async checkUserPermission(
+		session: UserSession,
+		headers: Headers,
+		permissionCheck: {
+			userId?: string;
+			role?: string;
+			permission?: Record<string, string[]>;
+			permissions?: Record<string, string[]>;
+		},
+	): Promise<boolean> {
+		try {
+			// biome-ignore lint/suspicious/noExplicitAny: Better Auth API types vary by plugin configuration
+			const authApi = this.options.auth.api as any;
+
+			// Check if userHasPermission API is available
+			if (typeof authApi.userHasPermission !== "function") {
+				console.error(
+					"userHasPermission API not available. Make sure access control is configured in Better Auth.",
+				);
+				return false;
+			}
+
+			// Build the request body
+			const body: {
+				userId?: string;
+				role?: string;
+				permission?: Record<string, string[]>;
+				permissions?: Record<string, string[]>;
+			} = {};
+
+			// Use provided userId or default to current user's ID
+			if (permissionCheck.userId) {
+				body.userId = permissionCheck.userId;
+			} else if (session.user.id) {
+				body.userId = session.user.id;
+			}
+
+			// Add role if provided (server-only)
+			if (permissionCheck.role) {
+				body.role = permissionCheck.role;
+			}
+
+			// Add permission or permissions (must have one)
+			if (permissionCheck.permission) {
+				body.permission = permissionCheck.permission;
+			} else if (permissionCheck.permissions) {
+				body.permissions = permissionCheck.permissions;
+			}
+
+			// Call the Better Auth userHasPermission API
+			const result = await authApi.userHasPermission({
+				body,
+				headers,
+			});
+			if (result?.success) {
+				return true;
+			}
+
+			return false;
+		} catch (error) {
+			// Log error for debugging but return false to trigger 403 Forbidden
+			// instead of letting the error propagate as a 500
+			console.error("Permission check error:", error);
+			console.error("Permission check body:", JSON.stringify(permissionCheck, null, 2));
 			return false;
 		}
 	}
