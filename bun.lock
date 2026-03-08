@@ -17,7 +17,7 @@
         "@nestjs/websockets": "^11.1.6",
         "@swc/cli": "^0.7.8",
         "@swc/core": "^1.13.20",
-        "@tsconfig/node20": "^20.1.6",
+        "@tsconfig/node22": "^22.0.2",
         "@types/bun": "latest",
         "@types/express": "^5.0.3",
         "@types/supertest": "^6.0.3",
@@ -401,7 +401,7 @@
 
     "@tokenizer/token": ["@tokenizer/token@0.3.0", "", {}, ""],
 
-    "@tsconfig/node20": ["@tsconfig/node20@20.1.9", "", {}, "sha512-IjlTv1RsvnPtUcjTqtVsZExKVq+KQx4g5pCP5tI7rAs6Xesl2qFwSz/tPDBC4JajkL/MlezBu3gPUwqRHl+RIg=="],
+    "@tsconfig/node22": ["@tsconfig/node22@22.0.5", "", {}, "sha512-hLf2ld+sYN/BtOJjHUWOk568dvjFQkHnLNa6zce25GIH+vxKfvTgm3qpaH6ToF5tu/NN0IH66s+Bb5wElHrLcw=="],
 
     "@types/body-parser": ["@types/body-parser@1.19.6", "", { "dependencies": { "@types/connect": "*", "@types/node": "*" } }, ""],
 
