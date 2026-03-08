@@ -23,6 +23,7 @@ import {
 	type OPTIONS_TYPE,
 } from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
+import { configureFastifyBodyParser } from "./fastify-body-parser.ts";
 import {
 	SkipBodyParsingMiddleware,
 	getNodeRequest,
@@ -143,6 +144,18 @@ export class AuthModule
 				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
 			);
 
+		if ("disableBodyParser" in this.options) {
+			this.logger.warn(
+				"`disableBodyParser` is deprecated. Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead.",
+			);
+		}
+
+		if ("enableRawBodyParser" in this.options) {
+			this.logger.warn(
+				"`enableRawBodyParser` is deprecated. Use `bodyParser.rawBody` instead.",
+			);
+		}
+
 		if (adapterType !== "fastify") {
 			consumer
 				.apply(
@@ -155,7 +168,7 @@ export class AuthModule
 		}
 
 		if (adapterType === "fastify") {
-			this.configureFastifyBodyParser();
+			configureFastifyBodyParser(this.adapter.httpAdapter, bodyParserOptions);
 		}
 
 		const handler = toNodeHandler(this.options.auth);
@@ -178,29 +191,6 @@ export class AuthModule
 			},
 		);
 		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
-	}
-
-	private configureFastifyBodyParser(): void {
-		const jsonOptions = this.options.bodyParser?.json;
-		const urlencodedOptions = this.options.bodyParser?.urlencoded;
-		const jsonHasUnsupportedOptions = Object.keys(jsonOptions ?? {}).some(
-			(key) => !["rawBody"].includes(key),
-		);
-		const hasUnsupportedOptions =
-			jsonHasUnsupportedOptions || urlencodedOptions !== undefined;
-
-		if (hasUnsupportedOptions) {
-			throw new Error(
-				"Custom body parser options are only supported when using the Express adapter. Fastify support is currently limited to bodyParser.json.rawBody and the deprecated disableBodyParser option.",
-			);
-		}
-
-		if (!this.options.disableBodyParser) {
-			this.adapter.httpAdapter.registerParserMiddleware?.(
-				undefined,
-				jsonOptions?.rawBody ?? this.options.enableRawBodyParser,
-			);
-		}
 	}
 
 	private setupHooks(

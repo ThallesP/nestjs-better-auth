@@ -1,6 +1,6 @@
 import { ConfigurableModuleBuilder } from "@nestjs/common";
+import type { NextFunction, Request, Response } from "express";
 import type { Auth } from "./auth-module.ts";
-import type { Request, Response, NextFunction } from "express";
 import type {
 	JsonBodyParserOptions,
 	UrlencodedBodyParserOptions,
@@ -8,6 +8,16 @@ import type {
 
 export type AuthModuleJsonBodyParserOptions = JsonBodyParserOptions & {
 	enabled?: boolean;
+};
+
+export type AuthModuleUrlencodedBodyParserOptions =
+	UrlencodedBodyParserOptions & {
+		enabled?: boolean;
+	};
+
+export type AuthModuleBodyParserOptions = {
+	json?: AuthModuleJsonBodyParserOptions;
+	urlencoded?: AuthModuleUrlencodedBodyParserOptions;
 	/**
 	 * When set to `true`, attaches the raw request buffer to `req.rawBody`.
 	 *
@@ -23,16 +33,6 @@ export type AuthModuleJsonBodyParserOptions = JsonBodyParserOptions & {
 	rawBody?: boolean;
 };
 
-export type AuthModuleUrlencodedBodyParserOptions =
-	UrlencodedBodyParserOptions & {
-		enabled?: boolean;
-	};
-
-export type AuthModuleBodyParserOptions = {
-	json?: AuthModuleJsonBodyParserOptions;
-	urlencoded?: AuthModuleUrlencodedBodyParserOptions;
-};
-
 export type AuthModuleOptions<A = Auth> = {
 	auth: A;
 	disableTrustedOriginsCors?: boolean;
@@ -41,7 +41,7 @@ export type AuthModuleOptions<A = Auth> = {
 	 */
 	disableBodyParser?: boolean;
 	/**
-	 * @deprecated Use `bodyParser.json.rawBody` instead.
+	 * @deprecated Use `bodyParser.rawBody` instead.
 	 */
 	enableRawBodyParser?: boolean;
 	bodyParser?: AuthModuleBodyParserOptions;

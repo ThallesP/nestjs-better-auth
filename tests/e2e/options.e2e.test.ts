@@ -4,13 +4,14 @@ import { InternalServerErrorException } from "@nestjs/common";
 import { MESSAGES } from "@nestjs/core/constants.js";
 import request from "supertest";
 
-const testHttpAdapter = process.env.TEST_HTTP_ADAPTER ?? "express";
-
 describe("options e2e", () => {
-	let testSetup: TestAppSetup;
+	let testSetup: TestAppSetup | undefined;
 
-	afterAll(async () => {
+	afterEach(async () => {
+		if (!testSetup) return;
+
 		await testSetup.app.close();
+		testSetup = undefined;
 	});
 
 	it("should not find any auth routes if disableControllers is set", async () => {
@@ -18,7 +19,6 @@ describe("options e2e", () => {
 
 		const httpServer = testSetup.app.getHttpServer();
 
-		// Make actual HTTP requests to verify endpoints are not registered
 		const signUpResponse = await request(httpServer)
 			.post("/api/auth/sign-up/email")
 			.send({
@@ -34,7 +34,6 @@ describe("options e2e", () => {
 				password: faker.internet.password({ length: 10 }),
 			});
 
-		// All requests should return 404 since routes are disabled
 		expect(signUpResponse.status).toBe(404);
 		expect(signInResponse.status).toBe(404);
 	});
@@ -50,50 +49,23 @@ describe("options e2e", () => {
 		});
 
 		const httpServer = testSetup.app.getHttpServer();
-
 		const response = await request(httpServer).get("/api/auth/ok");
 
 		expect(response.status).toBe(internalError.getStatus());
 		expect(response.body).toEqual({
 			statusCode: internalError.getStatus(),
-			// Whoops, the default thrown one is "Internal server error", whereas the one in
-			// `InternalServerErrorException` is "Internal Server Error", differing only in case.
-			// Otherwise we could do `expect(response.body).toEqual(internalError.getResponse())`
 			message: MESSAGES.UNKNOWN_EXCEPTION_MESSAGE,
 		});
 	});
 
-	it("should attach rawBody to request when bodyParser.json.rawBody is true", async () => {
+	it("should attach rawBody to request when bodyParser.rawBody is true", async () => {
 		testSetup = await createTestApp({
 			bodyParser: {
-				json: {
-					rawBody: true,
-				},
+				rawBody: true,
 			},
 		});
 
-		const httpServer = testSetup.app.getHttpServer();
-
-		const response = await request(httpServer)
-			.post("/test/raw-body")
-			.send({ test: "data" });
-
-		expect(response.status).toBe(201);
-		expect(response.body).toEqual({
-			hasRawBody: true,
-			rawBodyType: "object", // Buffer is typeof "object"
-			isBuffer: true,
-		});
-	});
-
-	it("should still attach rawBody when using deprecated enableRawBodyParser", async () => {
-		testSetup = await createTestApp({
-			enableRawBodyParser: true,
-		});
-
-		const httpServer = testSetup.app.getHttpServer();
-
-		const response = await request(httpServer)
+		const response = await request(testSetup.app.getHttpServer())
 			.post("/test/raw-body")
 			.send({ test: "data" });
 
@@ -105,14 +77,31 @@ describe("options e2e", () => {
 		});
 	});
 
-	it("should not attach rawBody to request when enableRawBodyParser is false", async () => {
+	it("should still attach rawBody when using deprecated enableRawBodyParser", async () => {
 		testSetup = await createTestApp({
-			enableRawBodyParser: false,
+			enableRawBodyParser: true,
 		});
 
-		const httpServer = testSetup.app.getHttpServer();
+		const response = await request(testSetup.app.getHttpServer())
+			.post("/test/raw-body")
+			.send({ test: "data" });
 
-		const response = await request(httpServer)
+		expect(response.status).toBe(201);
+		expect(response.body).toEqual({
+			hasRawBody: true,
+			rawBodyType: "object",
+			isBuffer: true,
+		});
+	});
+
+	it("should not attach rawBody to request when rawBody is disabled", async () => {
+		testSetup = await createTestApp({
+			bodyParser: {
+				rawBody: false,
+			},
+		});
+
+		const response = await request(testSetup.app.getHttpServer())
 			.post("/test/raw-body")
 			.send({ test: "data" });
 
@@ -125,10 +114,6 @@ describe("options e2e", () => {
 	});
 
 	it("should allow disabling only the json parser", async () => {
-		if (testHttpAdapter !== "express") {
-			return;
-		}
-
 		testSetup = await createTestApp({
 			bodyParser: {
 				json: {
@@ -137,9 +122,7 @@ describe("options e2e", () => {
 			},
 		});
 
-		const httpServer = testSetup.app.getHttpServer();
-
-		const response = await request(httpServer)
+		const response = await request(testSetup.app.getHttpServer())
 			.post("/test/json-body")
 			.send({ test: "data" });
 
@@ -151,10 +134,6 @@ describe("options e2e", () => {
 	});
 
 	it("should allow disabling only the urlencoded parser", async () => {
-		if (testHttpAdapter !== "express") {
-			return;
-		}
-
 		testSetup = await createTestApp({
 			bodyParser: {
 				urlencoded: {
@@ -163,9 +142,7 @@ describe("options e2e", () => {
 			},
 		});
 
-		const httpServer = testSetup.app.getHttpServer();
-
-		const response = await request(httpServer)
+		const response = await request(testSetup.app.getHttpServer())
 			.post("/test/form-body")
 			.type("form")
 			.send({ test: "data" });
@@ -178,10 +155,6 @@ describe("options e2e", () => {
 	});
 
 	it("should allow customizing the json parser limit", async () => {
-		if (testHttpAdapter !== "express") {
-			return;
-		}
-
 		const largePayload = "x".repeat(150_000);
 
 		testSetup = await createTestApp({
@@ -192,9 +165,7 @@ describe("options e2e", () => {
 			},
 		});
 
-		const httpServer = testSetup.app.getHttpServer();
-
-		const response = await request(httpServer)
+		const response = await request(testSetup.app.getHttpServer())
 			.post("/test/json-body")
 			.send({ payload: largePayload });
 
@@ -207,21 +178,19 @@ describe("options e2e", () => {
 		});
 	});
 
-	it("should reject unsupported bodyParser options on fastify", async () => {
-		if (testHttpAdapter !== "fastify") {
-			return;
-		}
+	it("should keep supporting the deprecated disableBodyParser option", async () => {
+		testSetup = await createTestApp({
+			disableBodyParser: true,
+		});
 
-		await expect(
-			createTestApp({
-				bodyParser: {
-					json: {
-						enabled: false,
-					},
-				},
-			}),
-		).rejects.toThrow(
-			"Custom body parser options are only supported when using the Express adapter.",
-		);
+		const response = await request(testSetup.app.getHttpServer())
+			.post("/test/json-body")
+			.send({ hello: "world" });
+
+		expect(response.status).toBe(201);
+		expect(response.body).toEqual({
+			hasBody: false,
+			body: null,
+		});
 	});
 });

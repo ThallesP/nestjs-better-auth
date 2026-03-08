@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
-import type { IncomingMessage, ServerResponse } from "node:http";
 import * as express from "express";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AuthModuleOptions } from "./auth-module-definition.ts";
 import type {
 	JsonBodyParserOptions,
@@ -65,13 +65,13 @@ export function resolveBodyParserOptions(
 	> = {},
 ): ResolvedBodyParserOptions {
 	const bodyParserEnabledByDefault = !options.disableBodyParser;
-
 	const jsonOptions = options.bodyParser?.json;
 	const urlencodedOptions = options.bodyParser?.urlencoded;
+	const rawBody =
+		options.bodyParser?.rawBody ?? options.enableRawBodyParser ?? false;
 
 	const {
 		enabled: jsonEnabled = bodyParserEnabledByDefault,
-		rawBody = options.enableRawBodyParser ?? false,
 		...jsonParserOptions
 	} = jsonOptions ?? {};
 	const {
@@ -140,8 +140,6 @@ export function SkipBodyParsingMiddleware(
 		? express.urlencoded(urlencodedParserOptions as never)
 		: null;
 
-	// Return a middleware function compatible with Nest's consumer.apply()
-	// NestJS consumer.apply() accepts plain functions directly
 	return (req: RequestLike, res: ResponseLike, next: NextFunction): void => {
 		if (matchesBasePath(req, basePath)) {
 			next();

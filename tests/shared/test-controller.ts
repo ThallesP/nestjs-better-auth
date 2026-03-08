@@ -28,6 +28,15 @@ export class TestController {
 		return { authenticated: !!req.user, session: req.session };
 	}
 
+	@AllowAnonymous()
+	@Post("echo-body")
+	echoBody(@Request() req: { body?: unknown; rawBody?: Buffer }) {
+		return {
+			body: req.body ?? null,
+			rawBody: req.rawBody?.toString("utf8") ?? null,
+		};
+	}
+
 	@Roles(["admin"])
 	@Get("admin-protected")
 	adminProtected(@Request() req: UserSession) {
@@ -40,7 +49,6 @@ export class TestController {
 		return { user: req.user };
 	}
 
-	// Organization-level role checks (OrgRoles)
 	@OrgRoles(["owner"])
 	@Get("org-owner-protected")
 	orgOwnerProtected(@Request() req: UserSession) {
