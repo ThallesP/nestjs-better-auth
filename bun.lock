@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "@thallesp/nestjs-better-auth",
-      "dependencies": {
-        "qs": "^6.14.0",
-      },
       "devDependencies": {
         "@apollo/server": "^5.0.0",
         "@as-integrations/express5": "^1.1.2",
@@ -29,6 +26,7 @@
         "@vitest/coverage-v8": "^3.2.4",
         "fastify": "^5.6.1",
         "graphql": "^16.11.0",
+        "qs": "^6.14.0",
         "reflect-metadata": "^0.2.2",
         "socket.io": "^4.8.1",
         "socket.io-client": "^4.8.1",
@@ -45,12 +43,14 @@
         "better-auth": ">=1.5.0 <2.0.0",
         "express": "^5.1.0",
         "graphql": "^16.11.0",
+        "qs": "^6.14.0",
         "typescript": "^5.9.2",
       },
       "optionalPeers": [
         "@nestjs/graphql",
         "@nestjs/websockets",
         "graphql",
+        "qs",
       ],
     },
   },

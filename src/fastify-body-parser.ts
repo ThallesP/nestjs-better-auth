@@ -1,5 +1,5 @@
 import type { HttpAdapterHost } from "@nestjs/core";
-import { parse as parseQs } from "qs";
+import { createRequire } from "node:module";
 import type {
 	BodyParserLimit,
 	BodyParserTypeMatcher,
@@ -17,6 +17,11 @@ type FastifyBodyParserHandler = (
 	body: Buffer,
 	done: FastifyBodyParserDone,
 ) => void;
+type QsModule = typeof import("qs");
+
+const require = createRequire(import.meta.url);
+
+let cachedQsParse: QsModule["parse"] | null | undefined;
 
 function resolveFastifyParserType(
 	type: BodyParserTypeMatcher | undefined,
@@ -133,6 +138,8 @@ function parseFastifyUrlencodedBody(
 		return parseSimpleFormBody(rawBody, options.parameterLimit);
 	}
 
+	const parseQs = getQsParse();
+
 	return parseQs(rawBody, {
 		charset: options.defaultCharset === "iso-8859-1" ? "iso-8859-1" : "utf-8",
 		charsetSentinel: options.charsetSentinel,
@@ -140,6 +147,32 @@ function parseFastifyUrlencodedBody(
 		interpretNumericEntities: options.interpretNumericEntities,
 		parameterLimit: options.parameterLimit,
 	});
+}
+
+function getQsParse() {
+	if (cachedQsParse !== undefined) {
+		return cachedQsParse;
+	}
+
+	try {
+		cachedQsParse = (require("qs") as QsModule).parse;
+	} catch (error) {
+		const moduleError = error as NodeJS.ErrnoException;
+
+		if (moduleError.code === "MODULE_NOT_FOUND") {
+			cachedQsParse = null;
+		} else {
+			throw error;
+		}
+	}
+
+	if (!cachedQsParse) {
+		throw new Error(
+			"Fastify bodyParser.urlencoded with extended: true requires the optional peer dependency 'qs'. Install 'qs' in your application to enable nested URL-encoded parsing.",
+		);
+	}
+
+	return cachedQsParse;
 }
 
 function registerFastifyBodyParser(
