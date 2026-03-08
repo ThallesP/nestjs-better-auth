@@ -4,8 +4,6 @@ import { InternalServerErrorException } from "@nestjs/common";
 import { MESSAGES } from "@nestjs/core/constants.js";
 import request from "supertest";
 
-const testHttpAdapter = process.env.TEST_HTTP_ADAPTER ?? "express";
-
 describe("options e2e", () => {
 	let testSetup: TestAppSetup | undefined;
 
@@ -194,23 +192,5 @@ describe("options e2e", () => {
 			hasBody: false,
 			body: null,
 		});
-	});
-
-	it("should reject unsupported bodyParser options on fastify", async () => {
-		if (testHttpAdapter !== "fastify") {
-			return;
-		}
-
-		await expect(
-			createTestApp({
-				bodyParser: {
-					json: {
-						inflate: false,
-					},
-				},
-			}),
-		).rejects.toThrow(
-			"Unsupported Fastify body parser option(s): json.inflate.",
-		);
 	});
 });

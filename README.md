@@ -82,7 +82,7 @@ import { auth } from "./auth";
 export class AppModule {}
 ```
 
-Both `bodyParser.json` and `bodyParser.urlencoded` accept the same options as `express.json()` / `express.urlencoded()`, plus an `enabled` flag if you want to disable either parser individually. Set `bodyParser.rawBody` to `true` if you also want Nest-style `req.rawBody` support.
+Both `bodyParser.json` and `bodyParser.urlencoded` accept parser options plus an `enabled` flag if you want to disable either parser individually. Set `bodyParser.rawBody` to `true` if you also want Nest-style `req.rawBody` support.
 
 ## Route Protection
 
@@ -582,7 +582,7 @@ The available options are:
 | Option                      | Default | Description                                                                                                                                                              |
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. Use this if you want to handle CORS configuration manually. |
-| `bodyParser`                | Re-adds `express.json()` and `express.urlencoded({ extended: true })` | Configure the body parsers re-added by the module after Nest body parsing is disabled. `json` and `urlencoded` accept the Express options object plus `enabled?: boolean`, and `rawBody?: boolean` enables `req.rawBody`. Fastify supports the common subset such as `enabled`, `limit`, `type`, `rawBody`, `json.reviver`, `json.strict`, and the main `urlencoded` parsing flags. |
+| `bodyParser`                | Re-adds JSON and URL-encoded body parsers | Configure the body parsers re-added by the module after Nest body parsing is disabled. `json` and `urlencoded` accept the parser options object plus `enabled?: boolean`, and `rawBody?: boolean` enables `req.rawBody`. |
 | `disableBodyParser`         | `false` | Deprecated. Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead. When set to `true`, disables both parsers unless you explicitly re-enable one in `bodyParser`. |
 | `enableRawBodyParser`       | `false` | Deprecated. Use `bodyParser.rawBody` instead. When set to `true`, enables raw body parsing and attaches the raw buffer to `req.rawBody`. |
 | `disableGlobalAuthGuard`    | `false` | When set to `true`, does not register `AuthGuard` as a global guard. Use this if you prefer to apply `AuthGuard` manually or register it yourself via `APP_GUARD`.       |
@@ -610,10 +610,7 @@ AuthModule.forRoot({
 });
 ```
 
-`bodyParser.rawBody` enables `req.rawBody` support, while `bodyParser.json` forwards options to `express.json()` and `bodyParser.urlencoded` forwards options to `express.urlencoded()`.
-
-> [!WARNING]
-> Fastify now supports the common body parser subset, but some Express-only options such as `inflate` still are not available there.
+`bodyParser.rawBody` enables `req.rawBody` support, while `bodyParser.json` and `bodyParser.urlencoded` configure the corresponding parser behavior for the active adapter.
 
 ### Using Custom Middleware
 

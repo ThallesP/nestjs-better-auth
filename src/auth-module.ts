@@ -48,32 +48,6 @@ const HOOKS = [
 	{ metadataKey: AFTER_HOOK_KEY, hookType: "after" as const },
 ];
 
-const FASTIFY_JSON_SUPPORTED_KEYS = new Set([
-	"enabled",
-	"limit",
-	"type",
-	"reviver",
-	"strict",
-]);
-const FASTIFY_URLENCODED_SUPPORTED_KEYS = new Set([
-	"enabled",
-	"limit",
-	"type",
-	"extended",
-	"parameterLimit",
-	"charsetSentinel",
-	"defaultCharset",
-	"interpretNumericEntities",
-	"depth",
-]);
-
-function getUnsupportedBodyParserKeys(
-	options: Record<string, unknown> | undefined,
-	supportedKeys: Set<string>,
-) {
-	return Object.keys(options ?? {}).filter((key) => !supportedKeys.has(key));
-}
-
 function resolveFastifyParserType(
 	type: BodyParserTypeMatcher | undefined,
 	fallback: string | string[],
@@ -84,7 +58,7 @@ function resolveFastifyParserType(
 
 	if (typeof type === "function") {
 		throw new Error(
-			"Function-based bodyParser type matchers are only supported with the Express adapter.",
+			"Function-based bodyParser type matchers are not supported with the Fastify adapter.",
 		);
 	}
 
@@ -351,29 +325,9 @@ export class AuthModule
 
 	private configureFastifyBodyParser(): void {
 		const bodyParserOptions = resolveBodyParserOptions(this.options);
-		const jsonOptions = this.options.bodyParser?.json;
-		const urlencodedOptions = this.options.bodyParser?.urlencoded;
 		const fastifyInstance = this.adapter.httpAdapter.getInstance() as {
 			removeContentTypeParser?: (contentType: string | string[]) => void;
 		};
-		const unsupportedJsonKeys = getUnsupportedBodyParserKeys(
-			jsonOptions,
-			FASTIFY_JSON_SUPPORTED_KEYS,
-		);
-		const unsupportedUrlencodedKeys = getUnsupportedBodyParserKeys(
-			urlencodedOptions,
-			FASTIFY_URLENCODED_SUPPORTED_KEYS,
-		);
-		const unsupportedKeys = [
-			...unsupportedJsonKeys.map((key) => `json.${key}`),
-			...unsupportedUrlencodedKeys.map((key) => `urlencoded.${key}`),
-		];
-
-		if (unsupportedKeys.length > 0) {
-			throw new Error(
-				`Unsupported Fastify body parser option(s): ${unsupportedKeys.join(", ")}. Supported Fastify options are bodyParser.rawBody, json.enabled, json.limit, json.type, json.reviver, json.strict, urlencoded.enabled, urlencoded.limit, urlencoded.type, urlencoded.extended, urlencoded.parameterLimit, urlencoded.charsetSentinel, urlencoded.defaultCharset, urlencoded.interpretNumericEntities, and urlencoded.depth.`,
-			);
-		}
 
 		fastifyInstance.removeContentTypeParser?.([
 			"application/json",
