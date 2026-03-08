@@ -4,8 +4,6 @@ import { Module, type INestApplication } from "@nestjs/common";
 import { GraphQLModule } from "@nestjs/graphql";
 import { ApolloDriver, type ApolloDriverConfig } from "@nestjs/apollo";
 import type { Request, Response } from "express";
-import { ExpressAdapter } from "@nestjs/platform-express";
-import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { bearer } from "better-auth/plugins/bearer";
 import { AuthModule } from "../../src/index.ts";
 import { betterAuth } from "better-auth";
@@ -15,6 +13,7 @@ import { TestGateway } from "./test-gateway.ts";
 import { admin } from "better-auth/plugins/admin";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { type OPTIONS_TYPE } from "../../src/auth-module-definition.ts";
+import { createTestHttpAdapter, initTestApplication } from "./http-adapter.ts";
 
 // Create Better Auth instance factory
 export function createTestAuth() {
@@ -75,29 +74,11 @@ export interface TestAppOptions {
 	initialize?: boolean;
 }
 
-export type TestHttpAdapter = "express" | "fastify";
-
-export function getTestHttpAdapter(): TestHttpAdapter {
-	const adapter = process.env.TEST_HTTP_ADAPTER;
-
-	if (adapter === "fastify") {
-		return "fastify";
-	}
-
-	return "express";
-}
-
-function createHttpAdapter() {
-	return getTestHttpAdapter() === "fastify"
-		? new FastifyAdapter()
-		: new ExpressAdapter();
-}
-
 export async function createTestNestApplication(
 	moduleRef: TestingModule,
 	appOptions?: TestAppOptions,
 ) {
-	const app = moduleRef.createNestApplication(createHttpAdapter(), {
+	const app = moduleRef.createNestApplication(createTestHttpAdapter(), {
 		bodyParser: false,
 	});
 
@@ -106,8 +87,7 @@ export async function createTestNestApplication(
 	}
 
 	if (appOptions?.initialize !== false) {
-		await app.init();
-		await app.getHttpAdapter().getInstance().ready?.();
+		await initTestApplication(app);
 	}
 
 	return app;

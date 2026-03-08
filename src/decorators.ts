@@ -52,6 +52,91 @@ export const OrgRoles = (roles: string[]): CustomDecorator =>
 	SetMetadata("ORG_ROLES", roles);
 
 /**
+ * Type for permission checks - maps resource names to arrays of actions
+ */
+export type PermissionCheck = Record<string, string[]>;
+
+/**
+ * Options for the UserHasPermission decorator
+ */
+export interface UserHasPermissionOptions {
+	/**
+	 * The user ID to check permissions for (optional, defaults to current user)
+	 */
+	userId?: string;
+	/**
+	 * The role to check permissions for (server-only, optional)
+	 */
+	role?: string;
+	/**
+	 * A single permission to check. Must use this, or permissions.
+	 */
+	permission?: PermissionCheck;
+	/**
+	 * Multiple permissions to check. Must use this, or permission.
+	 */
+	permissions?: PermissionCheck;
+}
+
+/**
+ * Specifies the permissions required to access a route or controller.
+ * Checks user permissions using Better Auth's access control system.
+ *
+ * Use this for fine-grained permission-based access control.
+ *
+ * @param options - Permission check options
+ * @example
+ * ```ts
+ * @UserHasPermission({ permission: { project: ["create", "update"] } })
+ * @UserHasPermission({ permissions: { project: ["create"], sale: ["create"] } })
+ * @UserHasPermission({ role: "admin", permission: { project: ["create"] } })
+ * ```
+ */
+export const UserHasPermission = (
+	options: UserHasPermissionOptions,
+): CustomDecorator => {
+	if (!options.permission && !options.permissions) {
+		throw new Error(
+			"UserHasPermission: Either 'permission' or 'permissions' must be provided",
+		);
+	}
+	return SetMetadata("USER_HAS_PERMISSION", options);
+};
+
+/**
+ * Options for the MemberHasPermission decorator
+ */
+export interface MemberHasPermissionOptions {
+	/**
+	 * The permissions to check. Must match the structure in your organization access control.
+	 */
+	permissions: PermissionCheck;
+}
+
+/**
+ * Specifies the organization member permissions required to access a route or controller.
+ * Checks organization member permissions using Better Auth's organization plugin access control.
+ * Requires an active organization (`activeOrganizationId` in session).
+ *
+ * Use this for fine-grained permission-based access control within organizations.
+ *
+ * @param options - Permission check options
+ * @example
+ * ```ts
+ * @MemberHasPermission({ permissions: { project: ["create", "update"] } })
+ * @MemberHasPermission({ permissions: { project: ["create"], sale: ["create"] } })
+ * ```
+ */
+export const MemberHasPermission = (
+	options: MemberHasPermissionOptions,
+): CustomDecorator => {
+	if (!options.permissions) {
+		throw new Error("MemberHasPermission: 'permissions' must be provided");
+	}
+	return SetMetadata("MEMBER_HAS_PERMISSION", options);
+};
+
+/**
  * @deprecated Use AllowAnonymous() instead.
  */
 export const Public = AllowAnonymous;

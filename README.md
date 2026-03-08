@@ -229,6 +229,167 @@ export class OrgController {
 > [!NOTE]
 > Both role decorators accept any role strings you define. Better Auth's organization plugin provides default roles (`owner`, `admin`, `member`), but you can configure custom roles. The organization creator automatically gets the `owner` role.
 
+### Permission-Based Access Control
+
+This library provides two permission decorators for fine-grained access control:
+
+| Decorator | Checks | Use Case |
+|-----------|--------|----------|
+| `@UserHasPermission()` | User-level permissions | System-level permissions ([admin plugin access control](https://www.better-auth.com/docs/plugins/admin/access-control)) |
+| `@MemberHasPermission()` | Organization member permissions | Organization-level permissions ([organization plugin access control](https://www.better-auth.com/docs/plugins/organization/access-control)) |
+
+#### @UserHasPermission() - System-Level Permissions
+
+Use `@UserHasPermission()` for system-wide permission-based access control. This checks user permissions using Better Auth's [admin plugin access control](https://www.better-auth.com/docs/plugins/admin/access-control).
+
+**Prerequisites:**
+- Configure access control in your Better Auth admin plugin
+
+```ts title="auth.ts"
+import { betterAuth } from "better-auth";
+import { admin } from "better-auth/plugins/admin";
+import { createAccessControl } from "better-auth/plugins/access";
+
+const statement = {
+  project: ["create", "share", "update", "delete"],
+  sale: ["create", "read", "update", "delete"],
+} as const;
+
+const ac = createAccessControl(statement);
+
+const editor = ac.newRole({
+  project: ["create", "update"],
+});
+
+const admin = ac.newRole({
+  project: ["create", "update", "delete"],
+  sale: ["create", "read", "update", "delete"],
+});
+
+export const auth = betterAuth({
+  plugins: [
+    admin({
+      ac,
+      roles: {
+        editor,
+        admin,
+      },
+    }),
+  ],
+});
+```
+
+**Usage:**
+
+```ts title="project.controller.ts"
+import { Controller, Get, Post } from "@nestjs/common";
+import { UserHasPermission } from "@thallesp/nestjs-better-auth";
+
+@Controller("projects")
+export class ProjectController {
+  @UserHasPermission({ permission: { project: ["create", "update"] } })
+  @Post()
+  async createProject() {
+    // Only users with project: ["create", "update"] permissions can access
+    return { message: "Project created" };
+  }
+
+  @UserHasPermission({ permission: { project: ["delete"] } })
+  @Post(":id/delete")
+  async deleteProject() {
+    // Only users with project: ["delete"] permission can access
+    return { message: "Project deleted" };
+  }
+
+  @UserHasPermission({
+    permissions: { project: ["create"], sale: ["create"] },
+  })
+}
+```
+
+**Options:**
+
+- `permission`: A single permission check (e.g., `{ project: ["create", "update"] }`)
+- `permissions`: Multiple permission checks across resources (e.g., `{ project: ["create"], sale: ["create"] }`)
+- `role` (server-only): Check permissions for a specific role
+- `userId` (optional): Check permissions for a specific user (defaults to current user)
+
+#### @MemberHasPermission() - Organization-Level Permissions
+
+Use `@MemberHasPermission()` for organization-scoped permission-based access control. This checks organization member permissions using Better Auth's [organization plugin access control](https://www.better-auth.com/docs/plugins/organization/access-control). Requires an active organization (`activeOrganizationId` in session).
+
+**Prerequisites:**
+- Configure access control in your Better Auth organization plugin
+- Define custom organization roles with permissions
+
+```ts title="auth.ts"
+import { betterAuth } from "better-auth";
+import { organization } from "better-auth/plugins/organization";
+import { createAccessControl } from "better-auth/plugins/access";
+
+const statement = {
+  project: ["create", "share", "update", "delete"],
+  sale: ["create", "read", "update", "delete"],
+  organization: ["update", "delete"],
+} as const;
+
+const ac = createAccessControl(statement);
+
+const editor = ac.newRole({
+  project: ["create", "update"],
+});
+
+const admin = ac.newRole({
+  project: ["create", "update", "delete"],
+  organization: ["update"],
+});
+
+export const auth = betterAuth({
+  plugins: [
+    organization({
+      ac,
+      roles: {
+        editor,
+        admin,
+      },
+    }),
+  ],
+});
+```
+
+**Usage:**
+
+```ts title="org-project.controller.ts"
+import { Controller, Get, Post } from "@nestjs/common";
+import { MemberHasPermission, Session, UserSession } from "@thallesp/nestjs-better-auth";
+
+@Controller("org/projects")
+export class OrgProjectController {
+  @MemberHasPermission({ permissions: { project: ["create", "update"] } })
+  @Post()
+  async createProject(@Session() session: UserSession) {
+    // Only org members with project: ["create", "update"] permissions can access
+    // Requires activeOrganizationId in session
+    return {
+      message: "Project created",
+      orgId: session.session.activeOrganizationId,
+    };
+  }
+
+  @MemberHasPermission({ permissions: { project: ["delete"] } })
+  @Post(":id/delete")
+  async deleteProject() {
+    // Only org members with project: ["delete"] permission can access
+    return { message: "Project deleted" };
+  }
+}
+```
+
+**Options:**
+
+- `permissions`: The permissions to check (required). Must match the structure in your organization access control.
+
+
 ### Hook Decorators
 
 > [!IMPORTANT]

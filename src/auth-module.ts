@@ -85,7 +85,7 @@ export class AuthModule
 		this.applicationConfig.setGlobalPrefixOptions({
 			exclude: [
 				...(globalPrefixOptions.exclude ?? []),
-				...mapToExcludeRoute([this.basePath]),
+				...mapToExcludeRoute([this.basePath, `${this.basePath}/*path`]),
 			],
 		});
 	}
