@@ -199,7 +199,7 @@ export class AuthGuard implements CanActivate {
 				headers,
 				permissionCheck,
 			);
-			if (!hasPermission) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+			if (!hasPermission) throw await AuthContextErrorMap[ctxType].FORBIDDEN();
 		}
 
 		// Check @MemberHasPermission() - organization member permission-based access control
@@ -216,7 +216,8 @@ export class AuthGuard implements CanActivate {
 				headers,
 				memberPermissionCheck,
 			);
-			if (!hasMemberPermission) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+			if (!hasMemberPermission)
+				throw await AuthContextErrorMap[ctxType].FORBIDDEN();
 		}
 
 		return true;
