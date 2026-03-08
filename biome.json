@@ -7,7 +7,7 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!**/dist"]
+		"includes": ["**", "!**/dist", "!**/.vitest-cjs"]
 	},
 	"formatter": {
 		"enabled": true,

@@ -13,7 +13,7 @@ import {
 	MetadataScanner,
 } from "@nestjs/core";
 import { toNodeHandler } from "better-auth/node";
-import { createAuthMiddleware } from "better-auth/plugins";
+import { createAuthMiddleware } from "better-auth/api";
 import type { Request, Response } from "express";
 import {
 	type ASYNC_OPTIONS_TYPE,
@@ -143,8 +143,20 @@ export class AuthModule
 
 		if (!this.options.disableBodyParser && adapterType !== "fastify") {
 			consumer
-				.apply(SkipBodyParsingMiddleware(this.basePath))
+				.apply(
+					SkipBodyParsingMiddleware({
+						basePath: this.basePath,
+						enableRawBodyParser: this.options.enableRawBodyParser,
+					}),
+				)
 				.forRoutes("*path");
+		}
+
+		if (!this.options.disableBodyParser && adapterType === "fastify") {
+			this.adapter.httpAdapter.registerParserMiddleware?.(
+				undefined,
+				this.options.enableRawBodyParser,
+			);
 		}
 
 		const handler = toNodeHandler(this.options.auth);

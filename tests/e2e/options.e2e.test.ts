@@ -60,4 +60,42 @@ describe("options e2e", () => {
 			message: MESSAGES.UNKNOWN_EXCEPTION_MESSAGE,
 		});
 	});
+
+	it("should attach rawBody to request when enableRawBodyParser is true", async () => {
+		testSetup = await createTestApp({
+			enableRawBodyParser: true,
+		});
+
+		const httpServer = testSetup.app.getHttpServer();
+
+		const response = await request(httpServer)
+			.post("/test/raw-body")
+			.send({ test: "data" });
+
+		expect(response.status).toBe(201);
+		expect(response.body).toEqual({
+			hasRawBody: true,
+			rawBodyType: "object", // Buffer is typeof "object"
+			isBuffer: true,
+		});
+	});
+
+	it("should not attach rawBody to request when enableRawBodyParser is false", async () => {
+		testSetup = await createTestApp({
+			enableRawBodyParser: false,
+		});
+
+		const httpServer = testSetup.app.getHttpServer();
+
+		const response = await request(httpServer)
+			.post("/test/raw-body")
+			.send({ test: "data" });
+
+		expect(response.status).toBe(201);
+		expect(response.body).toEqual({
+			hasRawBody: false,
+			rawBodyType: null,
+			isBuffer: false,
+		});
+	});
 });

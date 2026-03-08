@@ -1,4 +1,4 @@
-import { Controller, Get, Request } from "@nestjs/common";
+import { Controller, Get, Post, Request } from "@nestjs/common";
 import {
 	OptionalAuth,
 	AllowAnonymous,
@@ -6,6 +6,7 @@ import {
 	OrgRoles,
 } from "../../src/decorators.ts";
 import type { UserSession } from "../../src/auth-guard.ts";
+import type { Request as ExpressRequest } from "express";
 
 // Simple controller with one protected route and one public route
 @Controller("test")
@@ -62,5 +63,15 @@ export class TestController {
 	@Get("org-member-protected")
 	orgMemberProtected(@Request() req: UserSession) {
 		return { user: req.user };
+	}
+
+	@AllowAnonymous()
+	@Post("raw-body")
+	rawBody(@Request() req: ExpressRequest & { rawBody?: Buffer }) {
+		return {
+			hasRawBody: !!req.rawBody,
+			rawBodyType: req.rawBody ? typeof req.rawBody : null,
+			isBuffer: req.rawBody instanceof Buffer,
+		};
 	}
 }
