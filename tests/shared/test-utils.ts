@@ -4,7 +4,6 @@ import { Module, type INestApplication } from "@nestjs/common";
 import { GraphQLModule } from "@nestjs/graphql";
 import { ApolloDriver, type ApolloDriverConfig } from "@nestjs/apollo";
 import type { Request, Response } from "express";
-import { ExpressAdapter } from "@nestjs/platform-express";
 import { bearer } from "better-auth/plugins/bearer";
 import { AuthModule } from "../../src/index.ts";
 import { betterAuth } from "better-auth";
@@ -14,6 +13,10 @@ import { TestGateway } from "./test-gateway.ts";
 import { admin } from "better-auth/plugins/admin";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { type OPTIONS_TYPE } from "../../src/auth-module-definition.ts";
+import {
+	createTestHttpAdapter,
+	initTestApplication,
+} from "./http-adapter.ts";
 
 // Create Better Auth instance factory
 export function createTestAuth() {
@@ -79,21 +82,27 @@ export async function createTestApp(
 	appOptions?: TestAppOptions,
 ) {
 	const auth = createTestAuth();
-	const AppModule = createTestAppModule(async, auth, options);
+	const isFastify = process.env.TEST_HTTP_ADAPTER === "fastify";
+	const moduleOptions = isFastify
+		? { ...options, disableBodyParser: true }
+		: options;
+	const AppModule = createTestAppModule(async, auth, moduleOptions);
 
 	const moduleRef = await Test.createTestingModule({
 		imports: [AppModule],
 	}).compile();
 
-	const app = moduleRef.createNestApplication(new ExpressAdapter(), {
-		bodyParser: false,
+	const app = moduleRef.createNestApplication(createTestHttpAdapter(), {
+		...(isFastify
+			? { rawBody: Boolean(options?.enableRawBodyParser) }
+			: { bodyParser: false }),
 	});
 
 	if (appOptions?.globalPrefix) {
 		app.setGlobalPrefix(appOptions.globalPrefix);
 	}
 
-	await app.init();
+	await initTestApplication(app);
 
 	return { app, auth };
 }

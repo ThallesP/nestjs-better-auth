@@ -2,7 +2,6 @@ import request from "supertest";
 import { faker } from "@faker-js/faker";
 import { Test } from "@nestjs/testing";
 import { Module, Controller, Get } from "@nestjs/common";
-import { ExpressAdapter } from "@nestjs/platform-express";
 import { bearer } from "better-auth/plugins/bearer";
 import { admin } from "better-auth/plugins/admin";
 import { createAccessControl } from "better-auth/plugins/access";
@@ -11,6 +10,7 @@ import { AuthModule } from "../../src/index.ts";
 import { UserHasPermission } from "../../src/decorators.ts";
 import { type OPTIONS_TYPE } from "../../src/auth-module-definition.ts";
 import { Request } from "@nestjs/common";
+import { createTestApplication } from "../shared/http-adapter.ts";
 
 // Create custom access control with project and sale resources
 const statement = {
@@ -158,11 +158,9 @@ async function createPermissionTestApp(
 		imports: [AppModule],
 	}).compile();
 
-	const app = moduleRef.createNestApplication(new ExpressAdapter(), {
+	const app = await createTestApplication(moduleRef, {
 		bodyParser: false,
 	});
-
-	await app.init();
 
 	return { app, auth };
 }

@@ -29,6 +29,7 @@ import { AuthGuard } from "./auth-guard.ts";
 import { APP_GUARD } from "@nestjs/core";
 import { normalizePath } from "@nestjs/common/utils/shared.utils.js";
 import { mapToExcludeRoute } from "@nestjs/core/middleware/utils.js";
+import { MESSAGES } from "@nestjs/core/constants.js";
 
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
@@ -80,7 +81,7 @@ export class AuthModule
 		this.applicationConfig.setGlobalPrefixOptions({
 			exclude: [
 				...(globalPrefixOptions.exclude ?? []),
-				...mapToExcludeRoute([this.basePath]),
+				...mapToExcludeRoute([this.basePath, `${this.basePath}/*path`]),
 			],
 		});
 	}
@@ -147,14 +148,79 @@ export class AuthModule
 		}
 
 		const handler = toNodeHandler(this.options.auth);
-		consumer
-			.apply((req: Request, res: Response) => {
-				if (this.options.middleware) {
-					return this.options.middleware(req, res, () => handler(req, res));
+		const registerAuthRoute = (path: string) => {
+			this.adapter.httpAdapter.all(path, async (req: Request, res: Response) => {
+				const request = req as Request & {
+					raw?: Request;
+					body?: unknown;
+					baseUrl?: string;
+					url?: string;
+					method?: string;
+					headers: Request["headers"];
+					socket?: Request["socket"];
+				};
+				const response = res as Response & { raw?: Response };
+				const requestForHandler = Object.assign(request.raw ?? request, {
+					baseUrl: request.baseUrl ?? "",
+					body: request.body,
+					headers: request.headers,
+					method: request.method,
+					socket: request.raw?.socket ?? request.socket,
+					url: request.url ?? request.raw?.url,
+				});
+				const responseForHandler = response.raw ?? response;
+
+				try {
+					if (this.options.middleware) {
+						await new Promise<void>((resolve, reject) => {
+							try {
+								this.options.middleware?.(req, res, (error?: unknown) => {
+									if (error) {
+										reject(error);
+										return;
+									}
+									resolve();
+								});
+							} catch (error) {
+								reject(error);
+							}
+						});
+
+					if (this.adapter.httpAdapter.isHeadersSent(res)) {
+						return;
+					}
 				}
-				return handler(req, res);
-			})
-			.forRoutes(this.basePath);
+
+					await handler(requestForHandler as Request, responseForHandler);
+				} catch (error) {
+					this.logger.error(
+						error && typeof error === "object" && "message" in error
+							? String(error.message)
+							: MESSAGES.UNKNOWN_EXCEPTION_MESSAGE,
+						error,
+					);
+
+					if (!this.adapter.httpAdapter.isHeadersSent(res)) {
+						this.adapter.httpAdapter.reply(
+							res,
+							{
+								statusCode: 500,
+								message: MESSAGES.UNKNOWN_EXCEPTION_MESSAGE,
+							},
+							500,
+						);
+					}
+				}
+			});
+		};
+
+		const authWildcardPath =
+			this.adapter.httpAdapter.getType() === "fastify"
+				? `${this.basePath}/*`
+				: `${this.basePath}/*path`;
+
+		registerAuthRoute(this.basePath);
+		registerAuthRoute(authWildcardPath);
 		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
 	}
 

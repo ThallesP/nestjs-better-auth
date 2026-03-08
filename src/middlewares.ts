@@ -24,6 +24,16 @@ export interface SkipBodyParsingMiddlewareOptions {
 	enableRawBodyParser?: boolean;
 }
 
+type NestCompatibleRequest = Request & {
+	raw?: IncomingMessage & { url?: string };
+	originalUrl?: string;
+	url?: string;
+};
+
+type NestCompatibleResponse = Response & {
+	raw?: ServerResponse;
+};
+
 /**
  * Raw body parser verify callback.
  * Same implementation as NestJS's rawBodyParser.
@@ -56,19 +66,38 @@ export function SkipBodyParsingMiddleware(
 	// Return a middleware function compatible with Nest's consumer.apply()
 	// NestJS consumer.apply() accepts plain functions directly
 	return (req: Request, res: Response, next: NextFunction): void => {
+		const request = req as NestCompatibleRequest;
+		const response = res as NestCompatibleResponse;
+		const requestPath =
+			request.originalUrl ?? request.raw?.url ?? request.url ?? "";
+		const requestForParser = request.raw ?? request;
+		const responseForParser = response.raw ?? response;
+		const contentType = String(request.headers["content-type"] ?? "");
+
 		// skip body parsing for better-auth routes
-		if (req.baseUrl.startsWith(basePath)) {
+		if (requestPath.startsWith(basePath)) {
 			next();
 			return;
 		}
 
-		// Parse the body as usual
-		express.json(jsonParserOptions)(req, res, (err) => {
-			if (err) {
-				next(err);
-				return;
-			}
-			express.urlencoded({ extended: true })(req, res, next);
-		});
+		if (contentType.includes("application/json")) {
+			express.json(jsonParserOptions)(
+				requestForParser as Request,
+				responseForParser as Response,
+				next,
+			);
+			return;
+		}
+
+		if (contentType.includes("application/x-www-form-urlencoded")) {
+			express.urlencoded({ extended: true })(
+				requestForParser as Request,
+				responseForParser as Response,
+				next,
+			);
+			return;
+		}
+
+		next();
 	};
 }
