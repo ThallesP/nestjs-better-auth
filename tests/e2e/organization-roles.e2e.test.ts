@@ -7,7 +7,7 @@ import { betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins/bearer";
 import { organization } from "better-auth/plugins/organization";
 import { admin } from "better-auth/plugins/admin";
-import { AuthModule } from "@thallesp/nestjs-better-auth";
+import { AuthModule } from "../../src/index.ts";
 import { TestController } from "../shared/test-controller.ts";
 
 /**

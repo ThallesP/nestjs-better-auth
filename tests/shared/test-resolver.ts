@@ -1,11 +1,7 @@
 import { Resolver, Query, ObjectType, Field } from "@nestjs/graphql";
-import {
-	AllowAnonymous,
-	OptionalAuth,
-	Roles,
-	Session,
-	type UserSession,
-} from "@thallesp/nestjs-better-auth";
+import { AllowAnonymous, OptionalAuth, Roles } from "../../src/decorators.ts";
+import { Session } from "../../src/decorators.ts";
+import type { UserSession } from "../../src/auth-guard.ts";
 
 @ObjectType()
 class ProtectedUserIdResult {

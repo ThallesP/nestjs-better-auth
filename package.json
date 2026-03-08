@@ -17,19 +17,16 @@
 	"scripts": {
 		"build": "unbuild",
 		"prepack": "bun run unbuild",
-		"pretest": "bun run build",
 		"lint": "biome lint",
 		"format": "biome format",
 		"check": "biome check",
 		"test": "vitest"
 	},
-	"main": "./dist/index.cjs",
-	"types": "./dist/index.d.ts",
+	"types": "dist/index.d.ts",
 	"exports": {
 		".": {
-			"types": "./dist/index.d.ts",
+			"types": "./dist/index.d.mts",
 			"import": "./dist/index.mjs",
-			"require": "./dist/index.cjs",
 			"default": "./dist/index.mjs"
 		}
 	},

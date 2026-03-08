@@ -4,8 +4,8 @@ import {
 	AllowAnonymous,
 	Roles,
 	OrgRoles,
-	type UserSession,
-} from "@thallesp/nestjs-better-auth";
+} from "../../src/decorators.ts";
+import type { UserSession } from "../../src/auth-guard.ts";
 import type { Request as ExpressRequest } from "express";
 
 // Simple controller with one protected route and one public route

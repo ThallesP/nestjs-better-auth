@@ -11,9 +11,9 @@ import {
 	OptionalAuth,
 	Session,
 	type UserSession,
-	AuthGuard,
-} from "@thallesp/nestjs-better-auth";
+} from "../../src/index.ts";
 import { UseGuards } from "@nestjs/common";
+import { AuthGuard } from "../../src/auth-guard.ts";
 
 @WebSocketGateway({
 	path: "/ws",

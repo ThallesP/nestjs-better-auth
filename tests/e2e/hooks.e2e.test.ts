@@ -12,7 +12,7 @@ import {
 	BeforeHook,
 	AfterHook,
 	type AuthHookContext,
-} from "@thallesp/nestjs-better-auth";
+} from "../../src/index.ts";
 
 @Injectable()
 class HookTrackerService {

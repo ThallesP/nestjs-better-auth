@@ -3,8 +3,3 @@ export * from "./auth-service.ts";
 export * from "./auth-guard.ts";
 export * from "./auth-module.ts";
 export * from "./symbols.ts";
-export type {
-	AuthModuleAsyncOptions,
-	AuthModuleOptions,
-	AuthModuleRootOptions,
-} from "./auth-module-definition.ts";
