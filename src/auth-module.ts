@@ -48,6 +48,15 @@ const HOOKS = [
 	{ metadataKey: AFTER_HOOK_KEY, hookType: "after" as const },
 ];
 
+type FastifyUseBodyParser = NonNullable<
+	HttpAdapterHost["httpAdapter"]["useBodyParser"]
+>;
+type FastifyBodyParserDone = (err: Error | null, body?: unknown) => void;
+type FastifyBodyParserHandler = (
+	body: Buffer,
+	done: FastifyBodyParserDone,
+) => void;
+
 function resolveFastifyParserType(
 	type: BodyParserTypeMatcher | undefined,
 	fallback: string | string[],
@@ -170,6 +179,34 @@ function parseFastifyUrlencodedBody(
 		interpretNumericEntities: options.interpretNumericEntities,
 		parameterLimit: options.parameterLimit,
 	});
+}
+
+function registerFastifyBodyParser(
+	useBodyParser: FastifyUseBodyParser | undefined,
+	{
+		type,
+		fallbackType,
+		rawBody,
+		limit,
+		parse,
+	}: {
+		type: BodyParserTypeMatcher | undefined;
+		fallbackType: string;
+		rawBody: boolean;
+		limit: BodyParserLimit | undefined;
+		parse: FastifyBodyParserHandler;
+	},
+) {
+	useBodyParser?.(
+		resolveFastifyParserType(type, fallbackType),
+		rawBody,
+		{
+			bodyLimit: resolveFastifyBodyLimit(limit),
+		},
+		(_req: unknown, body: Buffer, done: FastifyBodyParserDone) => {
+			parse(body, done);
+		},
+	);
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: i don't want to cause issues/breaking changes between different ways of setting up better-auth and even versions
@@ -298,7 +335,7 @@ export class AuthModule
 		}
 
 		if (adapterType === "fastify") {
-			this.configureFastifyBodyParser();
+			this.configureFastifyBodyParser(bodyParserOptions);
 		}
 
 		const handler = toNodeHandler(this.options.auth);
@@ -323,28 +360,27 @@ export class AuthModule
 		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
 	}
 
-	private configureFastifyBodyParser(): void {
-		const bodyParserOptions = resolveBodyParserOptions(this.options);
+	private configureFastifyBodyParser(
+		bodyParserOptions: ReturnType<typeof resolveBodyParserOptions>,
+	): void {
 		const fastifyInstance = this.adapter.httpAdapter.getInstance() as {
 			removeContentTypeParser?: (contentType: string | string[]) => void;
 		};
+		const useBodyParser = this.adapter.httpAdapter.useBodyParser?.bind(
+			this.adapter.httpAdapter,
+		);
 
 		fastifyInstance.removeContentTypeParser?.([
 			"application/json",
 			"application/x-www-form-urlencoded",
 		]);
 
-		this.adapter.httpAdapter.useBodyParser?.(
-			resolveFastifyParserType(bodyParserOptions.json.type, "application/json"),
-			bodyParserOptions.json.rawBody,
-			{
-				bodyLimit: resolveFastifyBodyLimit(bodyParserOptions.json.limit),
-			},
-			(
-				_req: unknown,
-				body: Buffer,
-				done: (err: Error | null, body?: unknown) => void,
-			) => {
+		registerFastifyBodyParser(useBodyParser, {
+			type: bodyParserOptions.json.type,
+			fallbackType: "application/json",
+			rawBody: bodyParserOptions.json.rawBody,
+			limit: bodyParserOptions.json.limit,
+			parse: (body, done) => {
 				if (!bodyParserOptions.json.enabled) {
 					done(null, undefined);
 					return;
@@ -356,22 +392,14 @@ export class AuthModule
 					done(error as Error);
 				}
 			},
-		);
+		});
 
-		this.adapter.httpAdapter.useBodyParser?.(
-			resolveFastifyParserType(
-				bodyParserOptions.urlencoded.type,
-				"application/x-www-form-urlencoded",
-			),
-			bodyParserOptions.json.rawBody,
-			{
-				bodyLimit: resolveFastifyBodyLimit(bodyParserOptions.urlencoded.limit),
-			},
-			(
-				_req: unknown,
-				body: Buffer,
-				done: (err: Error | null, body?: unknown) => void,
-			) => {
+		registerFastifyBodyParser(useBodyParser, {
+			type: bodyParserOptions.urlencoded.type,
+			fallbackType: "application/x-www-form-urlencoded",
+			rawBody: bodyParserOptions.json.rawBody,
+			limit: bodyParserOptions.urlencoded.limit,
+			parse: (body, done) => {
 				if (!bodyParserOptions.urlencoded.enabled) {
 					done(null, undefined);
 					return;
@@ -386,7 +414,7 @@ export class AuthModule
 					done(error as Error);
 				}
 			},
-		);
+		});
 	}
 
 	private setupHooks(
