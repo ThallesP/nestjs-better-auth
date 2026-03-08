@@ -5,10 +5,13 @@ import { MESSAGES } from "@nestjs/core/constants.js";
 import request from "supertest";
 
 describe("options e2e", () => {
-	let testSetup: TestAppSetup;
+	let testSetup: TestAppSetup | undefined;
 
-	afterAll(async () => {
+	afterEach(async () => {
+		if (!testSetup) return;
+
 		await testSetup.app.close();
+		testSetup = undefined;
 	});
 
 	it("should not find any auth routes if disableControllers is set", async () => {
@@ -59,5 +62,96 @@ describe("options e2e", () => {
 			// Otherwise we could do `expect(response.body).toEqual(internalError.getResponse())`
 			message: MESSAGES.UNKNOWN_EXCEPTION_MESSAGE,
 		});
+	});
+
+	it("should allow configuring custom json body parser options", async () => {
+		testSetup = await createTestApp({
+			bodyParser: {
+				json: {
+					limit: "1kb",
+				},
+			},
+		});
+
+		const httpServer = testSetup.app.getHttpServer();
+		const smallPayload = { value: "a".repeat(100) };
+		const largePayload = { value: "a".repeat(2_000) };
+
+		await request(httpServer)
+			.post("/test/echo-body")
+			.send(smallPayload)
+			.expect(201)
+			.expect({ body: smallPayload, rawBody: null });
+
+		await request(httpServer)
+			.post("/test/echo-body")
+			.send(largePayload)
+			.expect(413);
+	});
+
+	it("should allow enabling and disabling parsers independently", async () => {
+		testSetup = await createTestApp({
+			bodyParser: {
+				json: {
+					enabled: false,
+				},
+			},
+		});
+
+		const httpServer = testSetup.app.getHttpServer();
+
+		await request(httpServer)
+			.post("/test/echo-body")
+			.send({ hello: "world" })
+			.expect(201)
+			.expect({ body: null, rawBody: null });
+
+		await request(httpServer)
+			.post("/test/echo-body")
+			.type("form")
+			.send({ hello: "world" })
+			.expect(201)
+			.expect({
+				body: { hello: "world" },
+				rawBody: null,
+			});
+	});
+
+	it("should expose rawBody when bodyParser.rawBody is enabled", async () => {
+		testSetup = await createTestApp({
+			bodyParser: {
+				json: {
+					limit: "2mb",
+				},
+				urlencoded: {
+					enabled: true,
+					extended: true,
+				},
+				rawBody: true,
+			},
+		});
+
+		const payload = { hello: "world" };
+
+		await request(testSetup.app.getHttpServer())
+			.post("/test/echo-body")
+			.send(payload)
+			.expect(201)
+			.expect({
+				body: payload,
+				rawBody: JSON.stringify(payload),
+			});
+	});
+
+	it("should keep supporting the deprecated disableBodyParser option", async () => {
+		testSetup = await createTestApp({
+			disableBodyParser: true,
+		});
+
+		await request(testSetup.app.getHttpServer())
+			.post("/test/echo-body")
+			.send({ hello: "world" })
+			.expect(201)
+			.expect({ body: null, rawBody: null });
 	});
 });

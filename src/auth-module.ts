@@ -16,6 +16,7 @@ import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/plugins";
 import type { Request, Response } from "express";
 import {
+	type AuthModuleBodyParserOptions,
 	type ASYNC_OPTIONS_TYPE,
 	type AuthModuleOptions,
 	ConfigurableModuleClass,
@@ -34,6 +35,27 @@ const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
 	{ metadataKey: AFTER_HOOK_KEY, hookType: "after" as const },
 ];
+
+function resolveBodyParserOptions(
+	options: AuthModuleOptions,
+): AuthModuleBodyParserOptions {
+	if (options.bodyParser) {
+		return options.bodyParser;
+	}
+
+	if (options.disableBodyParser) {
+		return {
+			json: { enabled: false },
+			urlencoded: { enabled: false },
+		};
+	}
+
+	return {};
+}
+
+function hasEnabledBodyParser(options: AuthModuleBodyParserOptions): boolean {
+	return (options.json?.enabled ?? true) || (options.urlencoded?.enabled ?? true);
+}
 
 // biome-ignore lint/suspicious/noExplicitAny: i don't want to cause issues/breaking changes between different ways of setting up better-auth and even versions
 export type Auth = any;
@@ -116,6 +138,7 @@ export class AuthModule
 
 	configure(consumer: MiddlewareConsumer): void {
 		const trustedOrigins = this.options.auth.options.trustedOrigins;
+		const bodyParserOptions = resolveBodyParserOptions(this.options);
 		// function-based trustedOrigins requires a Request (from web-apis) object to evaluate, which is not available in NestJS (we only have a express Request object)
 		// if we ever need this, take a look at better-call which show an implementation for this
 		const isNotFunctionBased = trustedOrigins && Array.isArray(trustedOrigins);
@@ -135,9 +158,17 @@ export class AuthModule
 				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
 			);
 
-		if (!this.options.disableBodyParser) {
+		if ("disableBodyParser" in this.options) {
+			this.logger.warn(
+				this.options.bodyParser
+					? "`disableBodyParser` is deprecated and ignored when `bodyParser` is provided. Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead."
+					: "`disableBodyParser` is deprecated. Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead.",
+			);
+		}
+
+		if (hasEnabledBodyParser(bodyParserOptions)) {
 			consumer
-				.apply(SkipBodyParsingMiddleware(this.basePath))
+				.apply(SkipBodyParsingMiddleware(this.basePath, bodyParserOptions))
 				.forRoutes("*path");
 		}
 

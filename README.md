@@ -42,7 +42,7 @@ import { AppModule } from "./app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    // Don't worry, the library will automatically re-add the default body parsers.
+    // The library will re-add the default body parsers for non-auth routes.
     bodyParser: false,
   });
   await app.listen(process.env.PORT ?? 3333);
@@ -63,10 +63,21 @@ import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { auth } from "./auth";
 
 @Module({
-  imports: [AuthModule.forRoot({ auth })],
+  imports: [
+    AuthModule.forRoot({
+      auth,
+      bodyParser: {
+        json: { limit: "2mb" },
+        urlencoded: { limit: "2mb", extended: true },
+        rawBody: true,
+      },
+    }),
+  ],
 })
 export class AppModule {}
 ```
+
+Both `bodyParser.json` and `bodyParser.urlencoded` accept the same options as `express.json()` / `express.urlencoded()`, plus an `enabled` flag if you want to disable either parser individually. Set `bodyParser.rawBody` to `true` if you also want Nest-style `req.rawBody` support.
 
 ## Route Protection
 
@@ -388,7 +399,11 @@ When configuring `AuthModule.forRoot()`, you can provide options to customize th
 AuthModule.forRoot({
   auth,
   disableTrustedOriginsCors: false,
-  disableBodyParser: false,
+  bodyParser: {
+    json: { enabled: true },
+    urlencoded: { enabled: true, extended: true },
+    rawBody: false,
+  },
   disableGlobalAuthGuard: false,
   disableControllers: false,
 });
@@ -399,10 +414,28 @@ The available options are:
 | Option                      | Default | Description                                                                                                                                                              |
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. Use this if you want to handle CORS configuration manually. |
-| `disableBodyParser`         | `false` | When set to `true`, disables the automatic body parser middleware. Use this if you want to handle request body parsing manually.                                         |
+| `bodyParser`                | Re-adds `express.json()` and `express.urlencoded({ extended: true })` | Configure the body parsers re-added by the module after Nest body parsing is disabled. `json` and `urlencoded` accept the Express options object plus `enabled?: boolean`, and `rawBody?: boolean` enables `req.rawBody`. |
+| `disableBodyParser`         | `false` | Deprecated. Equivalent to disabling both `bodyParser.json` and `bodyParser.urlencoded`.                                                                                 |
 | `disableGlobalAuthGuard`    | `false` | When set to `true`, does not register `AuthGuard` as a global guard. Use this if you prefer to apply `AuthGuard` manually or register it yourself via `APP_GUARD`.       |
 | `disableControllers`        | `false` | When set to `true`, does not register any controllers. Use this if you want to handle routes manually.                                                                   |
 | `middleware`                | `undefined` | Optional middleware function that wraps the Better Auth handler. Receives `(req, res, next)` parameters. Useful for integrating with request-scoped libraries like MikroORM's RequestContext. |
+
+Example:
+
+```ts
+AuthModule.forRoot({
+  auth,
+  bodyParser: {
+    json: {
+      limit: "2mb",
+    },
+    urlencoded: {
+      enabled: false,
+    },
+    rawBody: true,
+  },
+});
+```
 
 ### Using Custom Middleware
 

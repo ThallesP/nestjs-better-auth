@@ -1,4 +1,4 @@
-import { Controller, Get, Request } from "@nestjs/common";
+import { Controller, Get, Post, Request } from "@nestjs/common";
 import {
 	OptionalAuth,
 	AllowAnonymous,
@@ -25,6 +25,15 @@ export class TestController {
 	@Get("optional")
 	optional(@Request() req: UserSession) {
 		return { authenticated: !!req.user, session: req.session };
+	}
+
+	@AllowAnonymous()
+	@Post("echo-body")
+	echoBody(@Request() req: { body?: unknown; rawBody?: Buffer }) {
+		return {
+			body: req.body ?? null,
+			rawBody: req.rawBody?.toString("utf8") ?? null,
+		};
 	}
 
 	@Roles(["admin"])
