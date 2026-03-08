@@ -39,5 +39,27 @@
 		"parser": {
 			"unsafeParameterDecoratorsEnabled": true
 		}
-	}
+	},
+	"overrides": [
+		{
+			"includes": ["tests/**/*.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"patterns": [
+									{
+										"group": ["**/src/**"],
+										"message": "Import the package entry so the test suite exercises the built CommonJS output."
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		}
+	]
 }

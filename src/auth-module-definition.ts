@@ -44,3 +44,6 @@ export const { ConfigurableModuleClass, OPTIONS_TYPE, ASYNC_OPTIONS_TYPE } =
 			},
 		)
 		.build();
+
+export type AuthModuleRootOptions = typeof OPTIONS_TYPE;
+export type AuthModuleAsyncOptions = typeof ASYNC_OPTIONS_TYPE;

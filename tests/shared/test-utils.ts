@@ -6,14 +6,16 @@ import { ApolloDriver, type ApolloDriverConfig } from "@nestjs/apollo";
 import type { Request, Response } from "express";
 import { ExpressAdapter } from "@nestjs/platform-express";
 import { bearer } from "better-auth/plugins/bearer";
-import { AuthModule } from "../../src/index.ts";
+import {
+	AuthModule,
+	type AuthModuleRootOptions,
+} from "@thallesp/nestjs-better-auth";
 import { betterAuth } from "better-auth";
 import { TestController } from "./test-controller.ts";
 import { TestResolver } from "./test-resolver.ts";
 import { TestGateway } from "./test-gateway.ts";
 import { admin } from "better-auth/plugins/admin";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
-import { type OPTIONS_TYPE } from "../../src/auth-module-definition.ts";
 
 // Create Better Auth instance factory
 export function createTestAuth() {
@@ -39,7 +41,7 @@ export function createTestAuth() {
 export function createTestAppModule(
 	async: boolean,
 	auth: ReturnType<typeof createTestAuth>,
-	options?: Omit<typeof OPTIONS_TYPE, "auth">,
+	options?: Omit<AuthModuleRootOptions, "auth">,
 ) {
 	const authModule = async
 		? AuthModule.forRootAsync({
@@ -74,7 +76,7 @@ export interface TestAppOptions {
 }
 
 export async function createTestApp(
-	options?: Omit<typeof OPTIONS_TYPE, "auth">,
+	options?: Omit<AuthModuleRootOptions, "auth">,
 	async = false,
 	appOptions?: TestAppOptions,
 ) {

@@ -1,5 +1,5 @@
 {
-	"extends": "@tsconfig/node22/tsconfig.json",
+	"extends": "@tsconfig/node20/tsconfig.json",
 	"compilerOptions": {
 		"types": ["vitest/globals"],
 		"emitDecoratorMetadata": true,

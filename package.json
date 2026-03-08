@@ -4,6 +4,9 @@
 	"description": "Better Auth for NestJS",
 	"author": "Thalles Passos",
 	"license": "MIT",
+	"engines": {
+		"node": ">=20"
+	},
 	"keywords": [
 		"nestjs",
 		"better-auth",
@@ -14,16 +17,19 @@
 	"scripts": {
 		"build": "unbuild",
 		"prepack": "bun run unbuild",
+		"pretest": "bun run build",
 		"lint": "biome lint",
 		"format": "biome format",
 		"check": "biome check",
 		"test": "vitest"
 	},
-	"types": "dist/index.d.ts",
+	"main": "./dist/index.cjs",
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
-			"types": "./dist/index.d.mts",
+			"types": "./dist/index.d.ts",
 			"import": "./dist/index.mjs",
+			"require": "./dist/index.cjs",
 			"default": "./dist/index.mjs"
 		}
 	},
@@ -43,7 +49,7 @@
 		"@nestjs/websockets": "^11.1.6",
 		"@swc/cli": "^0.7.8",
 		"@swc/core": "^1.13.20",
-		"@tsconfig/node22": "^22.0.2",
+		"@tsconfig/node20": "^20.1.6",
 		"@types/bun": "latest",
 		"@types/express": "^5.0.3",
 		"@types/supertest": "^6.0.3",
