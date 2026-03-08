@@ -1,8 +1,11 @@
 import type { NextFunction, Request, Response } from "express";
-import type { OptionsJson, OptionsUrlencoded } from "body-parser";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import * as express from "express";
 import type { AuthModuleOptions } from "./auth-module-definition.ts";
+import type {
+	JsonBodyParserOptions,
+	UrlencodedBodyParserOptions,
+} from "./body-parser-options.ts";
 
 export interface SkipBodyParsingMiddlewareOptions {
 	/**
@@ -40,14 +43,15 @@ type ResponseLike = Response & {
 	raw?: Response;
 };
 
-export type ResolvedJsonBodyParserOptions = Omit<OptionsJson, "verify"> & {
+export type ResolvedJsonBodyParserOptions = JsonBodyParserOptions & {
 	enabled: boolean;
 	rawBody: boolean;
 };
 
-export type ResolvedUrlencodedBodyParserOptions = OptionsUrlencoded & {
-	enabled: boolean;
-};
+export type ResolvedUrlencodedBodyParserOptions =
+	UrlencodedBodyParserOptions & {
+		enabled: boolean;
+	};
 
 export type ResolvedBodyParserOptions = {
 	json: ResolvedJsonBodyParserOptions;
@@ -126,14 +130,14 @@ export function SkipBodyParsingMiddleware(
 	const { enabled: urlencodedEnabled, ...urlencodedParserOptions } =
 		bodyParser.urlencoded;
 
-	const expressJsonParserOptions: OptionsJson = rawBody
+	const expressJsonParserOptions = rawBody
 		? { ...jsonParserOptions, verify: rawBodyParser }
 		: jsonParserOptions;
 	const jsonParser = jsonEnabled
-		? express.json(expressJsonParserOptions)
+		? express.json(expressJsonParserOptions as never)
 		: null;
 	const urlencodedParser = urlencodedEnabled
-		? express.urlencoded(urlencodedParserOptions)
+		? express.urlencoded(urlencodedParserOptions as never)
 		: null;
 
 	// Return a middleware function compatible with Nest's consumer.apply()

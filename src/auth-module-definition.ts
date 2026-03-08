@@ -1,9 +1,12 @@
 import { ConfigurableModuleBuilder } from "@nestjs/common";
 import type { Auth } from "./auth-module.ts";
 import type { Request, Response, NextFunction } from "express";
-import type { OptionsJson, OptionsUrlencoded } from "body-parser";
+import type {
+	JsonBodyParserOptions,
+	UrlencodedBodyParserOptions,
+} from "./body-parser-options.ts";
 
-export type AuthModuleJsonBodyParserOptions = Omit<OptionsJson, "verify"> & {
+export type AuthModuleJsonBodyParserOptions = JsonBodyParserOptions & {
 	enabled?: boolean;
 	/**
 	 * When set to `true`, attaches the raw request buffer to `req.rawBody`.
@@ -20,9 +23,10 @@ export type AuthModuleJsonBodyParserOptions = Omit<OptionsJson, "verify"> & {
 	rawBody?: boolean;
 };
 
-export type AuthModuleUrlencodedBodyParserOptions = OptionsUrlencoded & {
-	enabled?: boolean;
-};
+export type AuthModuleUrlencodedBodyParserOptions =
+	UrlencodedBodyParserOptions & {
+		enabled?: boolean;
+	};
 
 export type AuthModuleBodyParserOptions = {
 	json?: AuthModuleJsonBodyParserOptions;
