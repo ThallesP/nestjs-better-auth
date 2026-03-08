@@ -23,13 +23,17 @@ import {
 	type OPTIONS_TYPE,
 } from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
-import { SkipBodyParsingMiddleware } from "./middlewares.ts";
+import {
+	SkipBodyParsingMiddleware,
+	getNodeRequest,
+	getNodeResponse,
+	matchesBasePath,
+} from "./middlewares.ts";
 import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
 import { AuthGuard } from "./auth-guard.ts";
 import { APP_GUARD } from "@nestjs/core";
 import { normalizePath } from "@nestjs/common/utils/shared.utils.js";
 import { mapToExcludeRoute } from "@nestjs/core/middleware/utils.js";
-import { MESSAGES } from "@nestjs/core/constants.js";
 
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
@@ -116,6 +120,7 @@ export class AuthModule
 	}
 
 	configure(consumer: MiddlewareConsumer): void {
+		const adapterType = this.adapter.httpAdapter.getType();
 		const trustedOrigins = this.options.auth.options.trustedOrigins;
 		// function-based trustedOrigins requires a Request (from web-apis) object to evaluate, which is not available in NestJS (we only have a express Request object)
 		// if we ever need this, take a look at better-call which show an implementation for this
@@ -136,7 +141,7 @@ export class AuthModule
 				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
 			);
 
-		if (!this.options.disableBodyParser) {
+		if (!this.options.disableBodyParser && adapterType !== "fastify") {
 			consumer
 				.apply(
 					SkipBodyParsingMiddleware({
@@ -147,80 +152,32 @@ export class AuthModule
 				.forRoutes("*path");
 		}
 
+		if (!this.options.disableBodyParser && adapterType === "fastify") {
+			this.adapter.httpAdapter.registerParserMiddleware?.(
+				undefined,
+				this.options.enableRawBodyParser,
+			);
+		}
+
 		const handler = toNodeHandler(this.options.auth);
-		const registerAuthRoute = (path: string) => {
-			this.adapter.httpAdapter.all(path, async (req: Request, res: Response) => {
-				const request = req as Request & {
-					raw?: Request;
-					body?: unknown;
-					baseUrl?: string;
-					url?: string;
-					method?: string;
-					headers: Request["headers"];
-					socket?: Request["socket"];
-				};
-				const response = res as Response & { raw?: Response };
-				const requestForHandler = Object.assign(request.raw ?? request, {
-					baseUrl: request.baseUrl ?? "",
-					body: request.body,
-					headers: request.headers,
-					method: request.method,
-					socket: request.raw?.socket ?? request.socket,
-					url: request.url ?? request.raw?.url,
-				});
-				const responseForHandler = response.raw ?? response;
-
-				try {
-					if (this.options.middleware) {
-						await new Promise<void>((resolve, reject) => {
-							try {
-								this.options.middleware?.(req, res, (error?: unknown) => {
-									if (error) {
-										reject(error);
-										return;
-									}
-									resolve();
-								});
-							} catch (error) {
-								reject(error);
-							}
-						});
-
-					if (this.adapter.httpAdapter.isHeadersSent(res)) {
-						return;
-					}
+		this.adapter.httpAdapter.use(
+			(req: Request, res: Response, next: () => void) => {
+				if (!matchesBasePath(req, this.basePath)) {
+					next();
+					return;
 				}
 
-					await handler(requestForHandler as Request, responseForHandler);
-				} catch (error) {
-					this.logger.error(
-						error && typeof error === "object" && "message" in error
-							? String(error.message)
-							: MESSAGES.UNKNOWN_EXCEPTION_MESSAGE,
-						error,
+				const nodeReq = getNodeRequest(req);
+				const nodeRes = getNodeResponse(res);
+
+				if (this.options.middleware) {
+					return this.options.middleware(req, res, () =>
+						handler(nodeReq, nodeRes),
 					);
-
-					if (!this.adapter.httpAdapter.isHeadersSent(res)) {
-						this.adapter.httpAdapter.reply(
-							res,
-							{
-								statusCode: 500,
-								message: MESSAGES.UNKNOWN_EXCEPTION_MESSAGE,
-							},
-							500,
-						);
-					}
 				}
-			});
-		};
-
-		const authWildcardPath =
-			this.adapter.httpAdapter.getType() === "fastify"
-				? `${this.basePath}/*`
-				: `${this.basePath}/*path`;
-
-		registerAuthRoute(this.basePath);
-		registerAuthRoute(authWildcardPath);
+				return handler(nodeReq, nodeRes);
+			},
+		);
 		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
 	}
 

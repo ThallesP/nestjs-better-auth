@@ -21,9 +21,10 @@
 		"format": "biome format",
 		"check": "biome check",
 		"test": "bun run test:express && bun run test:fastify",
-		"test:express": "TEST_HTTP_ADAPTER=express vitest --run",
-		"test:fastify": "TEST_HTTP_ADAPTER=fastify vitest --run",
-		"test:watch": "vitest"
+		"test:watch": "vitest",
+		"test:express": "TEST_HTTP_ADAPTER=express vitest run",
+		"test:fastify": "TEST_HTTP_ADAPTER=fastify vitest run",
+		"test:adapters": "sh -c 'status=0; bun run test:express & pid1=$!; bun run test:fastify & pid2=$!; wait $pid1 || status=$?; wait $pid2 || status=$?; exit $status'"
 	},
 	"types": "dist/index.d.ts",
 	"exports": {

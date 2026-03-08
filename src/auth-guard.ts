@@ -359,7 +359,6 @@ export class AuthGuard implements CanActivate {
 			const body: {
 				userId?: string;
 				role?: string;
-				permission?: Record<string, string[]>;
 				permissions?: Record<string, string[]>;
 			} = {};
 
@@ -375,9 +374,9 @@ export class AuthGuard implements CanActivate {
 				body.role = permissionCheck.role;
 			}
 
-			// Add permission or permissions (must have one)
+			// Better Auth expects the pluralized payload shape.
 			if (permissionCheck.permission) {
-				body.permission = permissionCheck.permission;
+				body.permissions = permissionCheck.permission;
 			} else if (permissionCheck.permissions) {
 				body.permissions = permissionCheck.permissions;
 			}

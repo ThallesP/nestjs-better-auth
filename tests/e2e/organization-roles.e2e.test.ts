@@ -8,7 +8,7 @@ import { organization } from "better-auth/plugins/organization";
 import { admin } from "better-auth/plugins/admin";
 import { AuthModule } from "../../src/index.ts";
 import { TestController } from "../shared/test-controller.ts";
-import { createTestApplication } from "../shared/http-adapter.ts";
+import { createTestNestApplication } from "../shared/test-utils.ts";
 
 /**
  * Creates a Better Auth instance with organization plugin enabled
@@ -45,9 +45,7 @@ async function createTestAppWithOrganization() {
 		imports: [AppModule],
 	}).compile();
 
-	const app = await createTestApplication(moduleRef, {
-		bodyParser: false,
-	});
+	const app = await createTestNestApplication(moduleRef);
 
 	return { app, auth };
 }

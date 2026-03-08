@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { Test } from "@nestjs/testing";
+import { Test, type TestingModule } from "@nestjs/testing";
 import { Module, type INestApplication } from "@nestjs/common";
 import { GraphQLModule } from "@nestjs/graphql";
 import { ApolloDriver, type ApolloDriverConfig } from "@nestjs/apollo";
@@ -74,6 +74,26 @@ export function createTestAppModule(
 // Factory function to create and configure a test NestJS application
 export interface TestAppOptions {
 	globalPrefix?: string;
+	initialize?: boolean;
+}
+
+export async function createTestNestApplication(
+	moduleRef: TestingModule,
+	appOptions?: TestAppOptions,
+) {
+	const app = moduleRef.createNestApplication(createTestHttpAdapter(), {
+		bodyParser: false,
+	});
+
+	if (appOptions?.globalPrefix) {
+		app.setGlobalPrefix(appOptions.globalPrefix);
+	}
+
+	if (appOptions?.initialize !== false) {
+		await initTestApplication(app);
+	}
+
+	return app;
 }
 
 export async function createTestApp(
@@ -82,27 +102,13 @@ export async function createTestApp(
 	appOptions?: TestAppOptions,
 ) {
 	const auth = createTestAuth();
-	const isFastify = process.env.TEST_HTTP_ADAPTER === "fastify";
-	const moduleOptions = isFastify
-		? { ...options, disableBodyParser: true }
-		: options;
-	const AppModule = createTestAppModule(async, auth, moduleOptions);
+	const AppModule = createTestAppModule(async, auth, options);
 
 	const moduleRef = await Test.createTestingModule({
 		imports: [AppModule],
 	}).compile();
 
-	const app = moduleRef.createNestApplication(createTestHttpAdapter(), {
-		...(isFastify
-			? { rawBody: Boolean(options?.enableRawBodyParser) }
-			: { bodyParser: false }),
-	});
-
-	if (appOptions?.globalPrefix) {
-		app.setGlobalPrefix(appOptions.globalPrefix);
-	}
-
-	await initTestApplication(app);
+	const app = await createTestNestApplication(moduleRef, appOptions);
 
 	return { app, auth };
 }

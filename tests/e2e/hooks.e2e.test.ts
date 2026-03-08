@@ -12,10 +12,7 @@ import {
 	AfterHook,
 	type AuthHookContext,
 } from "../../src/index.ts";
-import {
-	createTestApplication,
-	createTestHttpAdapter,
-} from "../shared/http-adapter.ts";
+import { createTestNestApplication } from "../shared/test-utils.ts";
 
 @Injectable()
 class HookTrackerService {
@@ -75,9 +72,7 @@ describe("hooks e2e", () => {
 			imports: [AppModule],
 		}).compile();
 
-		app = await createTestApplication(moduleRef, {
-			bodyParser: false,
-		});
+		app = await createTestNestApplication(moduleRef);
 	});
 
 	afterAll(async () => {
@@ -138,8 +133,8 @@ describe("hooks configuration validation", () => {
 			imports: [AppModule],
 		}).compile();
 
-		const app = moduleRef.createNestApplication(createTestHttpAdapter(), {
-			bodyParser: false,
+		const app = await createTestNestApplication(moduleRef, {
+			initialize: false,
 		});
 
 		await expect(app.init()).rejects.toThrow(
