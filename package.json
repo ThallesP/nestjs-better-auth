@@ -4,6 +4,9 @@
 	"description": "Better Auth for NestJS",
 	"author": "Thalles Passos",
 	"license": "MIT",
+	"engines": {
+		"node": ">=22.22.1 <23"
+	},
 	"keywords": [
 		"nestjs",
 		"better-auth",
@@ -20,11 +23,11 @@
 		"test": "vitest"
 	},
 	"types": "dist/index.d.ts",
-	"main": "./dist/index.cjs",
 	"exports": {
 		".": {
+			"types": "./dist/index.d.mts",
 			"import": "./dist/index.mjs",
-			"require": "./dist/index.cjs"
+			"default": "./dist/index.mjs"
 		}
 	},
 	"files": [
