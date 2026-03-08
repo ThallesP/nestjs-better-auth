@@ -23,12 +23,12 @@ bun add @thallesp/nestjs-better-auth
 ## Prerequisites
 
 > [!IMPORTANT]  
-> Requires `better-auth` >= 1.3.8. Older versions are deprecated and unsupported.
+> Requires `better-auth` >= 1.5.0. Older versions are deprecated and unsupported.
 
 Before you start, make sure you have:
 
 - A working NestJS application
-- Better Auth (>= 1.3.8) installed and configured ([installation guide](https://www.better-auth.com/docs/installation))
+- Better Auth (>= 1.5.0) installed and configured ([installation guide](https://www.better-auth.com/docs/installation))
 
 ## Basic Setup
 
@@ -49,6 +49,11 @@ async function bootstrap() {
 }
 bootstrap();
 ```
+
+> [!IMPORTANT]
+> **Side Effect:** Since we disable NestJS's built-in body parser, the `rawBody: true` option in `NestFactory.create()` has no effect.
+> If you need access to `req.rawBody` (e.g., for webhook signature verification), use `bodyParser.json.rawBody` in `AuthModule.forRoot()` instead.
+> See [Module Options](#module-options) for details.
 
 > [!WARNING]  
 > Currently the library has beta support for Fastify, if you experience any issues with it, please open an issue.
@@ -235,6 +240,167 @@ export class OrgController {
 > [!NOTE]
 > Both role decorators accept any role strings you define. Better Auth's organization plugin provides default roles (`owner`, `admin`, `member`), but you can configure custom roles. The organization creator automatically gets the `owner` role.
 
+### Permission-Based Access Control
+
+This library provides two permission decorators for fine-grained access control:
+
+| Decorator | Checks | Use Case |
+|-----------|--------|----------|
+| `@UserHasPermission()` | User-level permissions | System-level permissions ([admin plugin access control](https://www.better-auth.com/docs/plugins/admin/access-control)) |
+| `@MemberHasPermission()` | Organization member permissions | Organization-level permissions ([organization plugin access control](https://www.better-auth.com/docs/plugins/organization/access-control)) |
+
+#### @UserHasPermission() - System-Level Permissions
+
+Use `@UserHasPermission()` for system-wide permission-based access control. This checks user permissions using Better Auth's [admin plugin access control](https://www.better-auth.com/docs/plugins/admin/access-control).
+
+**Prerequisites:**
+- Configure access control in your Better Auth admin plugin
+
+```ts title="auth.ts"
+import { betterAuth } from "better-auth";
+import { admin } from "better-auth/plugins/admin";
+import { createAccessControl } from "better-auth/plugins/access";
+
+const statement = {
+  project: ["create", "share", "update", "delete"],
+  sale: ["create", "read", "update", "delete"],
+} as const;
+
+const ac = createAccessControl(statement);
+
+const editor = ac.newRole({
+  project: ["create", "update"],
+});
+
+const admin = ac.newRole({
+  project: ["create", "update", "delete"],
+  sale: ["create", "read", "update", "delete"],
+});
+
+export const auth = betterAuth({
+  plugins: [
+    admin({
+      ac,
+      roles: {
+        editor,
+        admin,
+      },
+    }),
+  ],
+});
+```
+
+**Usage:**
+
+```ts title="project.controller.ts"
+import { Controller, Get, Post } from "@nestjs/common";
+import { UserHasPermission } from "@thallesp/nestjs-better-auth";
+
+@Controller("projects")
+export class ProjectController {
+  @UserHasPermission({ permission: { project: ["create", "update"] } })
+  @Post()
+  async createProject() {
+    // Only users with project: ["create", "update"] permissions can access
+    return { message: "Project created" };
+  }
+
+  @UserHasPermission({ permission: { project: ["delete"] } })
+  @Post(":id/delete")
+  async deleteProject() {
+    // Only users with project: ["delete"] permission can access
+    return { message: "Project deleted" };
+  }
+
+  @UserHasPermission({
+    permissions: { project: ["create"], sale: ["create"] },
+  })
+}
+```
+
+**Options:**
+
+- `permission`: A single permission check (e.g., `{ project: ["create", "update"] }`)
+- `permissions`: Multiple permission checks across resources (e.g., `{ project: ["create"], sale: ["create"] }`)
+- `role` (server-only): Check permissions for a specific role
+- `userId` (optional): Check permissions for a specific user (defaults to current user)
+
+#### @MemberHasPermission() - Organization-Level Permissions
+
+Use `@MemberHasPermission()` for organization-scoped permission-based access control. This checks organization member permissions using Better Auth's [organization plugin access control](https://www.better-auth.com/docs/plugins/organization/access-control). Requires an active organization (`activeOrganizationId` in session).
+
+**Prerequisites:**
+- Configure access control in your Better Auth organization plugin
+- Define custom organization roles with permissions
+
+```ts title="auth.ts"
+import { betterAuth } from "better-auth";
+import { organization } from "better-auth/plugins/organization";
+import { createAccessControl } from "better-auth/plugins/access";
+
+const statement = {
+  project: ["create", "share", "update", "delete"],
+  sale: ["create", "read", "update", "delete"],
+  organization: ["update", "delete"],
+} as const;
+
+const ac = createAccessControl(statement);
+
+const editor = ac.newRole({
+  project: ["create", "update"],
+});
+
+const admin = ac.newRole({
+  project: ["create", "update", "delete"],
+  organization: ["update"],
+});
+
+export const auth = betterAuth({
+  plugins: [
+    organization({
+      ac,
+      roles: {
+        editor,
+        admin,
+      },
+    }),
+  ],
+});
+```
+
+**Usage:**
+
+```ts title="org-project.controller.ts"
+import { Controller, Get, Post } from "@nestjs/common";
+import { MemberHasPermission, Session, UserSession } from "@thallesp/nestjs-better-auth";
+
+@Controller("org/projects")
+export class OrgProjectController {
+  @MemberHasPermission({ permissions: { project: ["create", "update"] } })
+  @Post()
+  async createProject(@Session() session: UserSession) {
+    // Only org members with project: ["create", "update"] permissions can access
+    // Requires activeOrganizationId in session
+    return {
+      message: "Project created",
+      orgId: session.session.activeOrganizationId,
+    };
+  }
+
+  @MemberHasPermission({ permissions: { project: ["delete"] } })
+  @Post(":id/delete")
+  async deleteProject() {
+    // Only org members with project: ["delete"] permission can access
+    return { message: "Project deleted" };
+  }
+}
+```
+
+**Options:**
+
+- `permissions`: The permissions to check (required). Must match the structure in your organization access control.
+
+
 ### Hook Decorators
 
 > [!IMPORTANT]
@@ -404,6 +570,8 @@ AuthModule.forRoot({
     urlencoded: { enabled: true, extended: true },
     rawBody: false,
   },
+  disableBodyParser: false,
+  enableRawBodyParser: false,
   disableGlobalAuthGuard: false,
   disableControllers: false,
 });
@@ -415,12 +583,15 @@ The available options are:
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. Use this if you want to handle CORS configuration manually. |
 | `bodyParser`                | Re-adds `express.json()` and `express.urlencoded({ extended: true })` | Configure the body parsers re-added by the module after Nest body parsing is disabled. `json` and `urlencoded` accept the Express options object plus `enabled?: boolean`, and `rawBody?: boolean` enables `req.rawBody`. |
-| `disableBodyParser`         | `false` | Deprecated. Equivalent to disabling both `bodyParser.json` and `bodyParser.urlencoded`.                                                                                 |
+| `disableBodyParser`         | `false` | Deprecated. Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead. When set to `true`, disables both parsers unless you explicitly re-enable one in `bodyParser`. |
+| `enableRawBodyParser`       | `false` | Deprecated. Use `bodyParser.rawBody` instead. When set to `true`, enables raw body parsing and attaches the raw buffer to `req.rawBody`. |
 | `disableGlobalAuthGuard`    | `false` | When set to `true`, does not register `AuthGuard` as a global guard. Use this if you prefer to apply `AuthGuard` manually or register it yourself via `APP_GUARD`.       |
 | `disableControllers`        | `false` | When set to `true`, does not register any controllers. Use this if you want to handle routes manually.                                                                   |
 | `middleware`                | `undefined` | Optional middleware function that wraps the Better Auth handler. Receives `(req, res, next)` parameters. Useful for integrating with request-scoped libraries like MikroORM's RequestContext. |
 
-Example:
+### Body Parser Configuration
+
+Use `bodyParser` to customize the parsers that this library re-adds after you disable Nest's built-in body parser:
 
 ```ts
 AuthModule.forRoot({
@@ -430,12 +601,19 @@ AuthModule.forRoot({
       limit: "2mb",
     },
     urlencoded: {
-      enabled: false,
+      enabled: true,
+      extended: true,
+      limit: "2mb",
     },
     rawBody: true,
   },
 });
 ```
+
+`bodyParser.rawBody` enables `req.rawBody` support, while `bodyParser.json` forwards options to `express.json()` and `bodyParser.urlencoded` forwards options to `express.urlencoded()`.
+
+> [!WARNING]
+> Custom body parser options currently only apply to the Express adapter. Fastify support remains beta and is currently limited to `bodyParser.rawBody`.
 
 ### Using Custom Middleware
 

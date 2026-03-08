@@ -13,10 +13,9 @@ import {
 	MetadataScanner,
 } from "@nestjs/core";
 import { toNodeHandler } from "better-auth/node";
-import { createAuthMiddleware } from "better-auth/plugins";
+import { createAuthMiddleware } from "better-auth/api";
 import type { Request, Response } from "express";
 import {
-	type AuthModuleBodyParserOptions,
 	type ASYNC_OPTIONS_TYPE,
 	type AuthModuleOptions,
 	ConfigurableModuleClass,
@@ -24,7 +23,13 @@ import {
 	type OPTIONS_TYPE,
 } from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
-import { SkipBodyParsingMiddleware } from "./middlewares.ts";
+import {
+	SkipBodyParsingMiddleware,
+	getNodeRequest,
+	getNodeResponse,
+	matchesBasePath,
+	resolveBodyParserOptions,
+} from "./middlewares.ts";
 import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
 import { AuthGuard } from "./auth-guard.ts";
 import { APP_GUARD } from "@nestjs/core";
@@ -35,29 +40,6 @@ const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
 	{ metadataKey: AFTER_HOOK_KEY, hookType: "after" as const },
 ];
-
-function resolveBodyParserOptions(
-	options: AuthModuleOptions,
-): AuthModuleBodyParserOptions {
-	if (options.bodyParser) {
-		return options.bodyParser;
-	}
-
-	if (options.disableBodyParser) {
-		return {
-			json: { enabled: false },
-			urlencoded: { enabled: false },
-		};
-	}
-
-	return {};
-}
-
-function hasEnabledBodyParser(options: AuthModuleBodyParserOptions): boolean {
-	return (
-		(options.json?.enabled ?? true) || (options.urlencoded?.enabled ?? true)
-	);
-}
 
 // biome-ignore lint/suspicious/noExplicitAny: i don't want to cause issues/breaking changes between different ways of setting up better-auth and even versions
 export type Auth = any;
@@ -104,7 +86,7 @@ export class AuthModule
 		this.applicationConfig.setGlobalPrefixOptions({
 			exclude: [
 				...(globalPrefixOptions.exclude ?? []),
-				...mapToExcludeRoute([this.basePath]),
+				...mapToExcludeRoute([this.basePath, `${this.basePath}/*path`]),
 			],
 		});
 	}
@@ -139,6 +121,7 @@ export class AuthModule
 	}
 
 	configure(consumer: MiddlewareConsumer): void {
+		const adapterType = this.adapter.httpAdapter.getType();
 		const trustedOrigins = this.options.auth.options.trustedOrigins;
 		const bodyParserOptions = resolveBodyParserOptions(this.options);
 		// function-based trustedOrigins requires a Request (from web-apis) object to evaluate, which is not available in NestJS (we only have a express Request object)
@@ -162,28 +145,72 @@ export class AuthModule
 
 		if ("disableBodyParser" in this.options) {
 			this.logger.warn(
-				this.options.bodyParser
-					? "`disableBodyParser` is deprecated and ignored when `bodyParser` is provided. Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead."
-					: "`disableBodyParser` is deprecated. Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead.",
+				"`disableBodyParser` is deprecated. Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead.",
 			);
 		}
 
-		if (hasEnabledBodyParser(bodyParserOptions)) {
+		if ("enableRawBodyParser" in this.options) {
+			this.logger.warn(
+				"`enableRawBodyParser` is deprecated. Use `bodyParser.rawBody` instead.",
+			);
+		}
+
+		if (adapterType !== "fastify") {
 			consumer
-				.apply(SkipBodyParsingMiddleware(this.basePath, bodyParserOptions))
+				.apply(
+					SkipBodyParsingMiddleware({
+						basePath: this.basePath,
+						bodyParser: bodyParserOptions,
+					}),
+				)
 				.forRoutes("*path");
 		}
 
+		if (adapterType === "fastify") {
+			this.configureFastifyBodyParser();
+		}
+
 		const handler = toNodeHandler(this.options.auth);
-		consumer
-			.apply((req: Request, res: Response) => {
-				if (this.options.middleware) {
-					return this.options.middleware(req, res, () => handler(req, res));
+		this.adapter.httpAdapter.use(
+			(req: Request, res: Response, next: () => void) => {
+				if (!matchesBasePath(req, this.basePath)) {
+					next();
+					return;
 				}
-				return handler(req, res);
-			})
-			.forRoutes(this.basePath);
+
+				const nodeReq = getNodeRequest(req);
+				const nodeRes = getNodeResponse(res);
+
+				if (this.options.middleware) {
+					return this.options.middleware(req, res, () =>
+						handler(nodeReq, nodeRes),
+					);
+				}
+				return handler(nodeReq, nodeRes);
+			},
+		);
 		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
+	}
+
+	private configureFastifyBodyParser(): void {
+		const jsonOptions = this.options.bodyParser?.json;
+		const urlencodedOptions = this.options.bodyParser?.urlencoded;
+		const jsonHasUnsupportedOptions = Object.keys(jsonOptions ?? {}).length > 0;
+		const hasUnsupportedOptions =
+			jsonHasUnsupportedOptions || urlencodedOptions !== undefined;
+
+		if (hasUnsupportedOptions) {
+			throw new Error(
+				"Custom body parser options are only supported when using the Express adapter. Fastify support is currently limited to bodyParser.rawBody and the deprecated disableBodyParser / enableRawBodyParser options.",
+			);
+		}
+
+		if (!this.options.disableBodyParser) {
+			this.adapter.httpAdapter.registerParserMiddleware?.(
+				undefined,
+				this.options.bodyParser?.rawBody ?? this.options.enableRawBodyParser,
+			);
+		}
 	}
 
 	private setupHooks(

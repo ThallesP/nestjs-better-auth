@@ -19,25 +19,6 @@ import {
 import { getRequestFromContext } from "./utils.ts";
 
 /**
- * Lazy-load GraphQLError to make graphql an optional dependency
- */
-
-// biome-ignore lint/suspicious/noExplicitAny: GraphQLError type comes from optional graphql dependency
-let GraphQLErrorClass: any;
-function getGraphQLError() {
-	if (!GraphQLErrorClass) {
-		try {
-			GraphQLErrorClass = require("graphql").GraphQLError;
-		} catch (_error) {
-			throw new Error(
-				"graphql is required for GraphQL support. Please install it: npm install graphql",
-			);
-		}
-	}
-	return GraphQLErrorClass;
-}
-
-/**
  * Type representing a valid user session after authentication
  * Excludes null and undefined values from the session return type
  */
@@ -64,10 +45,10 @@ const AuthErrorType = {
  */
 // biome-ignore lint/suspicious/noExplicitAny: WsException type comes from optional @nestjs/websockets dependency
 let WsException: any;
-function getWsException() {
+async function getWsException() {
 	if (!WsException) {
 		try {
-			WsException = require("@nestjs/websockets").WsException;
+			WsException = (await import("@nestjs/websockets")).WsException;
 		} catch (_error) {
 			throw new Error(
 				"@nestjs/websockets is required for WebSocket support. Please install it: npm install @nestjs/websockets @nestjs/platform-socket.io",
@@ -79,17 +60,17 @@ function getWsException() {
 
 const AuthContextErrorMap: Record<
 	ContextType | "graphql",
-	Record<keyof typeof AuthErrorType, (args?: unknown) => Error>
+	Record<keyof typeof AuthErrorType, (args?: unknown) => Promise<Error>>
 > = {
 	http: {
-		UNAUTHORIZED: (args) =>
+		UNAUTHORIZED: async (args) =>
 			new UnauthorizedException(
 				args ?? {
 					code: "UNAUTHORIZED",
 					message: "Unauthorized",
 				},
 			),
-		FORBIDDEN: (args) =>
+		FORBIDDEN: async (args) =>
 			new ForbiddenException(
 				args ?? {
 					code: "FORBIDDEN",
@@ -98,48 +79,28 @@ const AuthContextErrorMap: Record<
 			),
 	},
 	graphql: {
-		UNAUTHORIZED: (args) => {
-			const GraphQLError = getGraphQLError();
-			if (typeof args === "string") {
-				return new GraphQLError(args);
-			} else if (typeof args === "object") {
-				return new GraphQLError(
-					// biome-ignore lint: if `message` is not set, a default is already in place.
-					(args as any)?.message ?? "Unauthorized",
-					args,
-				);
-			}
-
-			return new GraphQLError("Unauthorized");
+		UNAUTHORIZED: async (args) => {
+			if (args) return new UnauthorizedException(args);
+			return new UnauthorizedException();
 		},
-		FORBIDDEN: (args) => {
-			const GraphQLError = getGraphQLError();
-			if (typeof args === "string") {
-				return new GraphQLError(args);
-			} else if (typeof args === "object") {
-				return new GraphQLError(
-					// biome-ignore lint: if `message` is not set, a default is already in place.
-					(args as any)?.message ?? "Forbidden",
-					args,
-				);
-			}
-
-			return new GraphQLError("Forbidden");
+		FORBIDDEN: async (args) => {
+			if (args) return new ForbiddenException(args);
+			return new ForbiddenException("Insufficient permissions");
 		},
 	},
 	ws: {
-		UNAUTHORIZED: (args) => {
-			const WsExceptionClass = getWsException();
+		UNAUTHORIZED: async (args) => {
+			const WsExceptionClass = await getWsException();
 			return new WsExceptionClass(args ?? "UNAUTHORIZED");
 		},
-		FORBIDDEN: (args) => {
-			const WsExceptionClass = getWsException();
+		FORBIDDEN: async (args) => {
+			const WsExceptionClass = await getWsException();
 			return new WsExceptionClass(args ?? "FORBIDDEN");
 		},
 	},
 	rpc: {
-		UNAUTHORIZED: () => new Error("UNAUTHORIZED"),
-		FORBIDDEN: () => new Error("FORBIDDEN"),
+		UNAUTHORIZED: async () => new Error("UNAUTHORIZED"),
+		FORBIDDEN: async () => new Error("FORBIDDEN"),
 	},
 };
 
@@ -164,7 +125,7 @@ export class AuthGuard implements CanActivate {
 	 * @returns True if the request is authorized to proceed, throws an error otherwise
 	 */
 	async canActivate(context: ExecutionContext): Promise<boolean> {
-		const request = getRequestFromContext(context);
+		const request = await getRequestFromContext(context);
 		const session: UserSession | null = await this.options.auth.api.getSession({
 			headers: fromNodeHeaders(
 				request.headers || request?.handshake?.headers || [],
@@ -189,7 +150,7 @@ export class AuthGuard implements CanActivate {
 		if (!session && isOptional) return true;
 
 		const ctxType = context.getType();
-		if (!session) throw AuthContextErrorMap[ctxType].UNAUTHORIZED();
+		if (!session) throw await AuthContextErrorMap[ctxType].UNAUTHORIZED();
 
 		const headers = fromNodeHeaders(
 			request.headers || request?.handshake?.headers || [],
@@ -203,7 +164,7 @@ export class AuthGuard implements CanActivate {
 
 		if (requiredRoles && requiredRoles.length > 0) {
 			const hasRole = this.checkUserRole(session, requiredRoles);
-			if (!hasRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+			if (!hasRole) throw await AuthContextErrorMap[ctxType].FORBIDDEN();
 		}
 
 		// Check @OrgRoles() - organization member role only
@@ -218,7 +179,45 @@ export class AuthGuard implements CanActivate {
 				headers,
 				requiredOrgRoles,
 			);
-			if (!hasOrgRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+			if (!hasOrgRole) throw await AuthContextErrorMap[ctxType].FORBIDDEN();
+		}
+
+		// Check @UserHasPermission() - permission-based access control
+		const permissionCheck = this.reflector.getAllAndOverride<
+			| {
+					userId?: string;
+					role?: string;
+					permission?: Record<string, string[]>;
+					permissions?: Record<string, string[]>;
+			  }
+			| undefined
+		>("USER_HAS_PERMISSION", [context.getHandler(), context.getClass()]);
+
+		if (permissionCheck) {
+			const hasPermission = await this.checkUserPermission(
+				session,
+				headers,
+				permissionCheck,
+			);
+			if (!hasPermission) throw await AuthContextErrorMap[ctxType].FORBIDDEN();
+		}
+
+		// Check @MemberHasPermission() - organization member permission-based access control
+		const memberPermissionCheck = this.reflector.getAllAndOverride<
+			| {
+					permissions: Record<string, string[]>;
+			  }
+			| undefined
+		>("MEMBER_HAS_PERMISSION", [context.getHandler(), context.getClass()]);
+
+		if (memberPermissionCheck) {
+			const hasMemberPermission = await this.checkMemberPermission(
+				session,
+				headers,
+				memberPermissionCheck,
+			);
+			if (!hasMemberPermission)
+				throw await AuthContextErrorMap[ctxType].FORBIDDEN();
 		}
 
 		return true;
@@ -321,6 +320,150 @@ export class AuthGuard implements CanActivate {
 			// Log error for debugging but return false to trigger 403 Forbidden
 			// instead of letting the error propagate as a 500
 			console.error("Organization plugin error:", error);
+			return false;
+		}
+	}
+
+	/**
+	 * Checks if the user has the required permissions.
+	 * Used by @UserHasPermission() decorator for permission-based access control.
+	 * Calls Better Auth's userHasPermission API to verify permissions.
+	 * @param session - The user's session
+	 * @param headers - The request headers for API calls
+	 * @param permissionCheck - The permission check options
+	 * @returns True if user has the required permissions
+	 */
+	private async checkUserPermission(
+		session: UserSession,
+		headers: Headers,
+		permissionCheck: {
+			userId?: string;
+			role?: string;
+			permission?: Record<string, string[]>;
+			permissions?: Record<string, string[]>;
+		},
+	): Promise<boolean> {
+		try {
+			// biome-ignore lint/suspicious/noExplicitAny: Better Auth API types vary by plugin configuration
+			const authApi = this.options.auth.api as any;
+
+			// Check if userHasPermission API is available
+			if (typeof authApi.userHasPermission !== "function") {
+				console.error(
+					"userHasPermission API not available. Make sure access control is configured in Better Auth.",
+				);
+				return false;
+			}
+
+			// Build the request body
+			const body: {
+				userId?: string;
+				role?: string;
+				permissions?: Record<string, string[]>;
+			} = {};
+
+			// Use provided userId or default to current user's ID
+			if (permissionCheck.userId) {
+				body.userId = permissionCheck.userId;
+			} else if (session.user.id) {
+				body.userId = session.user.id;
+			}
+
+			// Add role if provided (server-only)
+			if (permissionCheck.role) {
+				body.role = permissionCheck.role;
+			}
+
+			// Better Auth expects the pluralized payload shape.
+			if (permissionCheck.permission) {
+				body.permissions = permissionCheck.permission;
+			} else if (permissionCheck.permissions) {
+				body.permissions = permissionCheck.permissions;
+			}
+
+			// Call the Better Auth userHasPermission API
+			const result = await authApi.userHasPermission({
+				body,
+				headers,
+			});
+			if (result?.success) {
+				return true;
+			}
+
+			return false;
+		} catch (error) {
+			// Log error for debugging but return false to trigger 403 Forbidden
+			// instead of letting the error propagate as a 500
+			console.error("Permission check error:", error);
+			console.error(
+				"Permission check body:",
+				JSON.stringify(permissionCheck, null, 2),
+			);
+			return false;
+		}
+	}
+
+	/**
+	 * Checks if the organization member has the required permissions.
+	 * Used by @MemberHasPermission() decorator for organization member permission-based access control.
+	 * Calls Better Auth's organization plugin hasPermission API to verify permissions.
+	 * Requires an active organization in the session.
+	 * @param session - The user's session
+	 * @param headers - The request headers for API calls
+	 * @param permissionCheck - The permission check options
+	 * @returns True if member has the required permissions
+	 */
+	private async checkMemberPermission(
+		session: UserSession,
+		headers: Headers,
+		permissionCheck: {
+			permissions: Record<string, string[]>;
+		},
+	): Promise<boolean> {
+		// Require an active organization (like @OrgRoles)
+		const activeOrgId = session.session?.activeOrganizationId;
+		if (!activeOrgId) {
+			return false;
+		}
+
+		try {
+			// biome-ignore lint/suspicious/noExplicitAny: Better Auth API types vary by plugin configuration
+			const authApi = this.options.auth.api as any;
+
+			// Check if hasPermission API is available (organization plugin)
+			if (typeof authApi.hasPermission !== "function") {
+				console.error(
+					"hasPermission API not available. Make sure organization plugin with access control is configured in Better Auth.",
+				);
+				return false;
+			}
+
+			// Build the request body - organization plugin only uses permissions
+			const body: {
+				permissions: Record<string, string[]>;
+			} = {
+				permissions: permissionCheck.permissions,
+			};
+
+			// Call the Better Auth organization plugin hasPermission API
+			const result = await authApi.hasPermission({
+				body,
+				headers,
+			});
+
+			if (result?.success) {
+				return true;
+			}
+
+			return false;
+		} catch (error) {
+			// Log error for debugging but return false to trigger 403 Forbidden
+			// instead of letting the error propagate as a 500
+			console.error("Member permission check error:", error);
+			console.error(
+				"Member permission check body:",
+				JSON.stringify(permissionCheck, null, 2),
+			);
 			return false;
 		}
 	}

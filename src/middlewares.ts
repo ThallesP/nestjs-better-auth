@@ -1,69 +1,115 @@
-import type { NextFunction, Request, RequestHandler, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import * as express from "express";
-import type { AuthModuleBodyParserOptions } from "./auth-module-definition.ts";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { AuthModuleOptions } from "./auth-module-definition.ts";
+import type {
+	JsonBodyParserOptions,
+	UrlencodedBodyParserOptions,
+} from "./body-parser-options.ts";
 
-type RequestWithRawBody = Request & {
-	rawBody?: Buffer;
+export interface SkipBodyParsingMiddlewareOptions {
+	/**
+	 * The base path for Better Auth routes. Body parsing will be skipped for these routes.
+	 * @default "/api/auth"
+	 */
+	basePath?: string;
+	bodyParser?: ResolvedBodyParserOptions;
+}
+
+/**
+ * Raw body parser verify callback.
+ * Same implementation as NestJS's rawBodyParser.
+ * @see https://github.com/nestjs/nest/blob/master/packages/platform-express/adapters/utils/get-body-parser-options.util.ts
+ */
+const rawBodyParser = (
+	req: IncomingMessage & { rawBody?: Buffer },
+	_res: ServerResponse,
+	buffer: Buffer,
+) => {
+	if (Buffer.isBuffer(buffer)) {
+		req.rawBody = buffer;
+	}
+	return true;
 };
 
-type ExpressVerifyCallback = (
-	req: Request,
-	res: Response,
-	buf: Buffer,
-	encoding: string,
-) => void;
+type RequestLike = Request & {
+	raw?: Request;
+	originalUrl?: string;
+	url?: string;
+	baseUrl?: string;
+};
 
-function withRawBodySupport<T extends { verify?: ExpressVerifyCallback }>(
-	options: T,
-	rawBody = false,
-): T {
-	if (!rawBody) return options;
+type ResponseLike = Response & {
+	raw?: Response;
+};
 
-	const verify = options.verify;
+export type ResolvedJsonBodyParserOptions = JsonBodyParserOptions & {
+	enabled: boolean;
+	rawBody: boolean;
+};
+
+export type ResolvedUrlencodedBodyParserOptions =
+	UrlencodedBodyParserOptions & {
+		enabled: boolean;
+	};
+
+export type ResolvedBodyParserOptions = {
+	json: ResolvedJsonBodyParserOptions;
+	urlencoded: ResolvedUrlencodedBodyParserOptions;
+};
+
+export function resolveBodyParserOptions(
+	options: Pick<
+		AuthModuleOptions,
+		"bodyParser" | "disableBodyParser" | "enableRawBodyParser"
+	> = {},
+): ResolvedBodyParserOptions {
+	const bodyParserEnabledByDefault = !options.disableBodyParser;
+	const jsonOptions = options.bodyParser?.json;
+	const urlencodedOptions = options.bodyParser?.urlencoded;
+	const rawBody =
+		options.bodyParser?.rawBody ?? options.enableRawBodyParser ?? false;
+
+	const {
+		enabled: jsonEnabled = bodyParserEnabledByDefault,
+		...jsonParserOptions
+	} = jsonOptions ?? {};
+	const {
+		enabled: urlencodedEnabled = bodyParserEnabledByDefault,
+		extended = true,
+		...urlencodedParserOptions
+	} = urlencodedOptions ?? {};
 
 	return {
-		...options,
-		verify: (req, res, buf, encoding) => {
-			(req as RequestWithRawBody).rawBody = buf;
-			verify?.(req, res, buf, encoding);
+		json: {
+			enabled: jsonEnabled,
+			rawBody,
+			...jsonParserOptions,
+		},
+		urlencoded: {
+			enabled: urlencodedEnabled,
+			extended,
+			...urlencodedParserOptions,
 		},
 	};
 }
 
-function createJsonBodyParser(
-	config?: AuthModuleBodyParserOptions["json"],
-	rawBody = false,
-): RequestHandler | undefined {
-	const { enabled = true, ...options } = config ?? {};
-	if (!enabled) return;
-
-	return express.json(withRawBodySupport(options, rawBody));
+export function getRequestPath(req: RequestLike) {
+	return req.originalUrl ?? req.url ?? req.baseUrl ?? req.raw?.url ?? "";
 }
 
-function createUrlencodedBodyParser(
-	config?: AuthModuleBodyParserOptions["urlencoded"],
-	rawBody = false,
-): RequestHandler | undefined {
-	const { enabled = true, extended = true, ...options } = config ?? {};
-	if (!enabled) return;
-
-	return express.urlencoded(
-		withRawBodySupport({ extended, ...options }, rawBody),
-	);
+export function getNodeRequest(req: RequestLike) {
+	return req.raw ?? req;
 }
 
-function runMiddleware(
-	middleware: RequestHandler | undefined,
-	req: Request,
-	res: Response,
-	next: NextFunction,
-) {
-	if (!middleware) {
-		next();
-		return;
-	}
+export function getNodeResponse(res: ResponseLike) {
+	return res.raw ?? res;
+}
 
-	middleware(req, res, next);
+export function matchesBasePath(req: RequestLike, basePath: string) {
+	const requestPath = getRequestPath(req);
+
+	return requestPath === basePath || requestPath.startsWith(`${basePath}/`);
 }
 
 /**
@@ -71,34 +117,57 @@ function runMiddleware(
  * configured basePath.
  */
 export function SkipBodyParsingMiddleware(
-	basePath = "/api/auth",
-	bodyParser: AuthModuleBodyParserOptions = {},
+	options: SkipBodyParsingMiddlewareOptions = {},
 ) {
-	const jsonBodyParser = createJsonBodyParser(
-		bodyParser.json,
-		bodyParser.rawBody,
-	);
-	const urlencodedBodyParser = createUrlencodedBodyParser(
-		bodyParser.urlencoded,
-		bodyParser.rawBody,
-	);
+	const { basePath = "/api/auth", bodyParser = resolveBodyParserOptions() } =
+		options;
 
-	// Return a middleware function compatible with Nest's consumer.apply()
-	// NestJS consumer.apply() accepts plain functions directly
-	return (req: Request, res: Response, next: NextFunction): void => {
-		// skip body parsing for better-auth routes
-		if (req.baseUrl.startsWith(basePath)) {
+	const {
+		enabled: jsonEnabled,
+		rawBody,
+		...jsonParserOptions
+	} = bodyParser.json;
+	const { enabled: urlencodedEnabled, ...urlencodedParserOptions } =
+		bodyParser.urlencoded;
+
+	const expressJsonParserOptions = rawBody
+		? { ...jsonParserOptions, verify: rawBodyParser }
+		: jsonParserOptions;
+	const jsonParser = jsonEnabled
+		? express.json(expressJsonParserOptions as never)
+		: null;
+	const urlencodedParser = urlencodedEnabled
+		? express.urlencoded(urlencodedParserOptions as never)
+		: null;
+
+	return (req: RequestLike, res: ResponseLike, next: NextFunction): void => {
+		if (matchesBasePath(req, basePath)) {
 			next();
 			return;
 		}
 
-		// Parse the body as usual
-		runMiddleware(jsonBodyParser, req, res, (err) => {
+		const nodeReq = getNodeRequest(req);
+		const nodeRes = getNodeResponse(res);
+
+		const runUrlencodedParser = (err?: unknown) => {
 			if (err) {
 				next(err);
 				return;
 			}
-			runMiddleware(urlencodedBodyParser, req, res, next);
-		});
+
+			if (!urlencodedParser) {
+				next();
+				return;
+			}
+
+			urlencodedParser(nodeReq, nodeRes, next);
+		};
+
+		if (!jsonParser) {
+			runUrlencodedParser();
+			return;
+		}
+
+		jsonParser(nodeReq, nodeRes, runUrlencodedParser);
 	};
 }

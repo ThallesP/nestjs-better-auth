@@ -1,10 +1,9 @@
 import "reflect-metadata";
-import { Test } from "@nestjs/testing";
+import { Test, type TestingModule } from "@nestjs/testing";
 import { Module, type INestApplication } from "@nestjs/common";
 import { GraphQLModule } from "@nestjs/graphql";
 import { ApolloDriver, type ApolloDriverConfig } from "@nestjs/apollo";
 import type { Request, Response } from "express";
-import { ExpressAdapter } from "@nestjs/platform-express";
 import { bearer } from "better-auth/plugins/bearer";
 import { AuthModule } from "../../src/index.ts";
 import { betterAuth } from "better-auth";
@@ -14,6 +13,7 @@ import { TestGateway } from "./test-gateway.ts";
 import { admin } from "better-auth/plugins/admin";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { type OPTIONS_TYPE } from "../../src/auth-module-definition.ts";
+import { createTestHttpAdapter, initTestApplication } from "./http-adapter.ts";
 
 // Create Better Auth instance factory
 export function createTestAuth() {
@@ -71,6 +71,26 @@ export function createTestAppModule(
 // Factory function to create and configure a test NestJS application
 export interface TestAppOptions {
 	globalPrefix?: string;
+	initialize?: boolean;
+}
+
+export async function createTestNestApplication(
+	moduleRef: TestingModule,
+	appOptions?: TestAppOptions,
+) {
+	const app = moduleRef.createNestApplication(createTestHttpAdapter(), {
+		bodyParser: false,
+	});
+
+	if (appOptions?.globalPrefix) {
+		app.setGlobalPrefix(appOptions.globalPrefix);
+	}
+
+	if (appOptions?.initialize !== false) {
+		await initTestApplication(app);
+	}
+
+	return app;
 }
 
 export async function createTestApp(
@@ -85,15 +105,7 @@ export async function createTestApp(
 		imports: [AppModule],
 	}).compile();
 
-	const app = moduleRef.createNestApplication(new ExpressAdapter(), {
-		bodyParser: false,
-	});
-
-	if (appOptions?.globalPrefix) {
-		app.setGlobalPrefix(appOptions.globalPrefix);
-	}
-
-	await app.init();
+	const app = await createTestNestApplication(moduleRef, appOptions);
 
 	return { app, auth };
 }

@@ -3,7 +3,6 @@ import request from "supertest";
 import { faker } from "@faker-js/faker";
 import { Module, Injectable, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { ExpressAdapter } from "@nestjs/platform-express";
 import { betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins/bearer";
 import {
@@ -13,6 +12,7 @@ import {
 	AfterHook,
 	type AuthHookContext,
 } from "../../src/index.ts";
+import { createTestNestApplication } from "../shared/test-utils.ts";
 
 @Injectable()
 class HookTrackerService {
@@ -72,11 +72,7 @@ describe("hooks e2e", () => {
 			imports: [AppModule],
 		}).compile();
 
-		app = moduleRef.createNestApplication(new ExpressAdapter(), {
-			bodyParser: false,
-		});
-
-		await app.init();
+		app = await createTestNestApplication(moduleRef);
 	});
 
 	afterAll(async () => {
@@ -137,8 +133,8 @@ describe("hooks configuration validation", () => {
 			imports: [AppModule],
 		}).compile();
 
-		const app = moduleRef.createNestApplication(new ExpressAdapter(), {
-			bodyParser: false,
+		const app = await createTestNestApplication(moduleRef, {
+			initialize: false,
 		});
 
 		await expect(app.init()).rejects.toThrow(
