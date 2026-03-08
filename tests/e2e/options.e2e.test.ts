@@ -116,10 +116,6 @@ describe("options e2e", () => {
 	});
 
 	it("should allow disabling only the json parser", async () => {
-		if (testHttpAdapter !== "express") {
-			return;
-		}
-
 		testSetup = await createTestApp({
 			bodyParser: {
 				json: {
@@ -140,10 +136,6 @@ describe("options e2e", () => {
 	});
 
 	it("should allow disabling only the urlencoded parser", async () => {
-		if (testHttpAdapter !== "express") {
-			return;
-		}
-
 		testSetup = await createTestApp({
 			bodyParser: {
 				urlencoded: {
@@ -165,10 +157,6 @@ describe("options e2e", () => {
 	});
 
 	it("should allow customizing the json parser limit", async () => {
-		if (testHttpAdapter !== "express") {
-			return;
-		}
-
 		const largePayload = "x".repeat(150_000);
 
 		testSetup = await createTestApp({
@@ -193,10 +181,6 @@ describe("options e2e", () => {
 	});
 
 	it("should keep supporting the deprecated disableBodyParser option", async () => {
-		if (testHttpAdapter !== "express") {
-			return;
-		}
-
 		testSetup = await createTestApp({
 			disableBodyParser: true,
 		});
@@ -221,12 +205,12 @@ describe("options e2e", () => {
 			createTestApp({
 				bodyParser: {
 					json: {
-						enabled: false,
+						inflate: false,
 					},
 				},
 			}),
 		).rejects.toThrow(
-			"Custom body parser options are only supported when using the Express adapter.",
+			"Unsupported Fastify body parser option(s): json.inflate.",
 		);
 	});
 });

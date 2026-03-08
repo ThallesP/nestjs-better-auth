@@ -15,6 +15,7 @@ import {
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/api";
 import type { Request, Response } from "express";
+import { parse as parseQs } from "qs";
 import {
 	type ASYNC_OPTIONS_TYPE,
 	type AuthModuleOptions,
@@ -23,7 +24,13 @@ import {
 	type OPTIONS_TYPE,
 } from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
+import type {
+	BodyParserLimit,
+	BodyParserTypeMatcher,
+} from "./body-parser-options.ts";
 import {
+	type ResolvedJsonBodyParserOptions,
+	type ResolvedUrlencodedBodyParserOptions,
 	SkipBodyParsingMiddleware,
 	getNodeRequest,
 	getNodeResponse,
@@ -40,6 +47,156 @@ const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
 	{ metadataKey: AFTER_HOOK_KEY, hookType: "after" as const },
 ];
+
+const FASTIFY_JSON_SUPPORTED_KEYS = new Set([
+	"enabled",
+	"limit",
+	"type",
+	"reviver",
+	"strict",
+]);
+const FASTIFY_URLENCODED_SUPPORTED_KEYS = new Set([
+	"enabled",
+	"limit",
+	"type",
+	"extended",
+	"parameterLimit",
+	"charsetSentinel",
+	"defaultCharset",
+	"interpretNumericEntities",
+	"depth",
+]);
+
+function getUnsupportedBodyParserKeys(
+	options: Record<string, unknown> | undefined,
+	supportedKeys: Set<string>,
+) {
+	return Object.keys(options ?? {}).filter((key) => !supportedKeys.has(key));
+}
+
+function resolveFastifyParserType(
+	type: BodyParserTypeMatcher | undefined,
+	fallback: string | string[],
+) {
+	if (type === undefined) {
+		return fallback;
+	}
+
+	if (typeof type === "function") {
+		throw new Error(
+			"Function-based bodyParser type matchers are only supported with the Express adapter.",
+		);
+	}
+
+	return type;
+}
+
+function resolveFastifyBodyLimit(limit: BodyParserLimit | undefined) {
+	if (limit === undefined) {
+		return undefined;
+	}
+
+	if (typeof limit === "number") {
+		return limit;
+	}
+
+	const normalizedLimit = limit.trim().toLowerCase();
+	const match = /^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)?$/.exec(normalizedLimit);
+
+	if (!match) {
+		throw new Error(
+			`Unsupported Fastify body parser limit '${limit}'. Use a number of bytes or a string like '2mb'.`,
+		);
+	}
+
+	const units = {
+		b: 1,
+		kb: 1024,
+		mb: 1024 * 1024,
+		gb: 1024 * 1024 * 1024,
+	};
+	const value = Number.parseFloat(match[1]);
+	const unit = (match[2] ?? "b") as keyof typeof units;
+
+	return Math.floor(value * units[unit]);
+}
+
+function parseFastifyJsonBody(
+	body: Buffer,
+	options: Pick<ResolvedJsonBodyParserOptions, "reviver" | "strict">,
+) {
+	const rawBody = body.toString("utf8");
+	const trimmedBody = rawBody.trim();
+
+	if (trimmedBody.length === 0) {
+		return {};
+	}
+
+	if (options.strict !== false) {
+		const firstCharacter = trimmedBody[0];
+
+		if (firstCharacter !== "{" && firstCharacter !== "[") {
+			throw new SyntaxError("Invalid JSON payload");
+		}
+	}
+
+	return JSON.parse(rawBody, options.reviver);
+}
+
+function parseSimpleFormBody(body: string, parameterLimit?: number) {
+	const params = new URLSearchParams(body);
+	const result: Record<string, string | string[]> = {};
+	let count = 0;
+
+	for (const [key, value] of params.entries()) {
+		count += 1;
+
+		if (parameterLimit !== undefined && count > parameterLimit) {
+			break;
+		}
+
+		const currentValue = result[key];
+
+		if (currentValue === undefined) {
+			result[key] = value;
+			continue;
+		}
+
+		result[key] = Array.isArray(currentValue)
+			? [...currentValue, value]
+			: [currentValue, value];
+	}
+
+	return result;
+}
+
+function parseFastifyUrlencodedBody(
+	body: Buffer,
+	options: Pick<
+		ResolvedUrlencodedBodyParserOptions,
+		| "extended"
+		| "parameterLimit"
+		| "charsetSentinel"
+		| "defaultCharset"
+		| "interpretNumericEntities"
+		| "depth"
+	>,
+) {
+	const encoding = options.defaultCharset === "iso-8859-1" ? "latin1" : "utf8";
+	const rawBody = body.toString(encoding);
+
+	if (options.extended === false) {
+		return parseSimpleFormBody(rawBody, options.parameterLimit);
+	}
+
+	return parseQs(rawBody, {
+		charset: options.defaultCharset === "iso-8859-1" ? "iso-8859-1" : "utf-8",
+		charsetSentinel: options.charsetSentinel,
+		depth: options.depth,
+		interpretNumericEntities: options.interpretNumericEntities,
+		parameterLimit: options.parameterLimit,
+	});
+}
 
 // biome-ignore lint/suspicious/noExplicitAny: i don't want to cause issues/breaking changes between different ways of setting up better-auth and even versions
 export type Auth = any;
@@ -193,24 +350,89 @@ export class AuthModule
 	}
 
 	private configureFastifyBodyParser(): void {
+		const bodyParserOptions = resolveBodyParserOptions(this.options);
 		const jsonOptions = this.options.bodyParser?.json;
 		const urlencodedOptions = this.options.bodyParser?.urlencoded;
-		const jsonHasUnsupportedOptions = Object.keys(jsonOptions ?? {}).length > 0;
-		const hasUnsupportedOptions =
-			jsonHasUnsupportedOptions || urlencodedOptions !== undefined;
+		const fastifyInstance = this.adapter.httpAdapter.getInstance() as {
+			removeContentTypeParser?: (contentType: string | string[]) => void;
+		};
+		const unsupportedJsonKeys = getUnsupportedBodyParserKeys(
+			jsonOptions,
+			FASTIFY_JSON_SUPPORTED_KEYS,
+		);
+		const unsupportedUrlencodedKeys = getUnsupportedBodyParserKeys(
+			urlencodedOptions,
+			FASTIFY_URLENCODED_SUPPORTED_KEYS,
+		);
+		const unsupportedKeys = [
+			...unsupportedJsonKeys.map((key) => `json.${key}`),
+			...unsupportedUrlencodedKeys.map((key) => `urlencoded.${key}`),
+		];
 
-		if (hasUnsupportedOptions) {
+		if (unsupportedKeys.length > 0) {
 			throw new Error(
-				"Custom body parser options are only supported when using the Express adapter. Fastify support is currently limited to bodyParser.rawBody and the deprecated disableBodyParser / enableRawBodyParser options.",
+				`Unsupported Fastify body parser option(s): ${unsupportedKeys.join(", ")}. Supported Fastify options are bodyParser.rawBody, json.enabled, json.limit, json.type, json.reviver, json.strict, urlencoded.enabled, urlencoded.limit, urlencoded.type, urlencoded.extended, urlencoded.parameterLimit, urlencoded.charsetSentinel, urlencoded.defaultCharset, urlencoded.interpretNumericEntities, and urlencoded.depth.`,
 			);
 		}
 
-		if (!this.options.disableBodyParser) {
-			this.adapter.httpAdapter.registerParserMiddleware?.(
-				undefined,
-				this.options.bodyParser?.rawBody ?? this.options.enableRawBodyParser,
-			);
-		}
+		fastifyInstance.removeContentTypeParser?.([
+			"application/json",
+			"application/x-www-form-urlencoded",
+		]);
+
+		this.adapter.httpAdapter.useBodyParser?.(
+			resolveFastifyParserType(bodyParserOptions.json.type, "application/json"),
+			bodyParserOptions.json.rawBody,
+			{
+				bodyLimit: resolveFastifyBodyLimit(bodyParserOptions.json.limit),
+			},
+			(
+				_req: unknown,
+				body: Buffer,
+				done: (err: Error | null, body?: unknown) => void,
+			) => {
+				if (!bodyParserOptions.json.enabled) {
+					done(null, undefined);
+					return;
+				}
+
+				try {
+					done(null, parseFastifyJsonBody(body, bodyParserOptions.json));
+				} catch (error) {
+					done(error as Error);
+				}
+			},
+		);
+
+		this.adapter.httpAdapter.useBodyParser?.(
+			resolveFastifyParserType(
+				bodyParserOptions.urlencoded.type,
+				"application/x-www-form-urlencoded",
+			),
+			bodyParserOptions.json.rawBody,
+			{
+				bodyLimit: resolveFastifyBodyLimit(bodyParserOptions.urlencoded.limit),
+			},
+			(
+				_req: unknown,
+				body: Buffer,
+				done: (err: Error | null, body?: unknown) => void,
+			) => {
+				if (!bodyParserOptions.urlencoded.enabled) {
+					done(null, undefined);
+					return;
+				}
+
+				try {
+					done(
+						null,
+						parseFastifyUrlencodedBody(body, bodyParserOptions.urlencoded),
+					);
+				} catch (error) {
+					done(error as Error);
+				}
+			},
+		);
 	}
 
 	private setupHooks(
