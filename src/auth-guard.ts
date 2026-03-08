@@ -86,7 +86,7 @@ const AuthContextErrorMap: Record<
 		FORBIDDEN: async (args) => {
 			if (args) return new ForbiddenException(args);
 			return new ForbiddenException("Insufficient permissions");
-		}
+		},
 	},
 	ws: {
 		UNAUTHORIZED: async (args) => {
