@@ -15,7 +15,6 @@ import {
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/api";
 import type { Request, Response } from "express";
-import { parse as parseQs } from "qs";
 import {
 	type ASYNC_OPTIONS_TYPE,
 	type AuthModuleOptions,
@@ -24,13 +23,8 @@ import {
 	type OPTIONS_TYPE,
 } from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
-import type {
-	BodyParserLimit,
-	BodyParserTypeMatcher,
-} from "./body-parser-options.ts";
+import { configureFastifyBodyParser } from "./fastify-body-parser.ts";
 import {
-	type ResolvedJsonBodyParserOptions,
-	type ResolvedUrlencodedBodyParserOptions,
 	SkipBodyParsingMiddleware,
 	getNodeRequest,
 	getNodeResponse,
@@ -47,167 +41,6 @@ const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
 	{ metadataKey: AFTER_HOOK_KEY, hookType: "after" as const },
 ];
-
-type FastifyUseBodyParser = NonNullable<
-	HttpAdapterHost["httpAdapter"]["useBodyParser"]
->;
-type FastifyBodyParserDone = (err: Error | null, body?: unknown) => void;
-type FastifyBodyParserHandler = (
-	body: Buffer,
-	done: FastifyBodyParserDone,
-) => void;
-
-function resolveFastifyParserType(
-	type: BodyParserTypeMatcher | undefined,
-	fallback: string | string[],
-) {
-	if (type === undefined) {
-		return fallback;
-	}
-
-	if (typeof type === "function") {
-		throw new Error(
-			"Function-based bodyParser type matchers are not supported with the Fastify adapter.",
-		);
-	}
-
-	return type;
-}
-
-function resolveFastifyBodyLimit(limit: BodyParserLimit | undefined) {
-	if (limit === undefined) {
-		return undefined;
-	}
-
-	if (typeof limit === "number") {
-		return limit;
-	}
-
-	const normalizedLimit = limit.trim().toLowerCase();
-	const match = /^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)?$/.exec(normalizedLimit);
-
-	if (!match) {
-		throw new Error(
-			`Unsupported Fastify body parser limit '${limit}'. Use a number of bytes or a string like '2mb'.`,
-		);
-	}
-
-	const units = {
-		b: 1,
-		kb: 1024,
-		mb: 1024 * 1024,
-		gb: 1024 * 1024 * 1024,
-	};
-	const value = Number.parseFloat(match[1]);
-	const unit = (match[2] ?? "b") as keyof typeof units;
-
-	return Math.floor(value * units[unit]);
-}
-
-function parseFastifyJsonBody(
-	body: Buffer,
-	options: Pick<ResolvedJsonBodyParserOptions, "reviver" | "strict">,
-) {
-	const rawBody = body.toString("utf8");
-	const trimmedBody = rawBody.trim();
-
-	if (trimmedBody.length === 0) {
-		return {};
-	}
-
-	if (options.strict !== false) {
-		const firstCharacter = trimmedBody[0];
-
-		if (firstCharacter !== "{" && firstCharacter !== "[") {
-			throw new SyntaxError("Invalid JSON payload");
-		}
-	}
-
-	return JSON.parse(rawBody, options.reviver);
-}
-
-function parseSimpleFormBody(body: string, parameterLimit?: number) {
-	const params = new URLSearchParams(body);
-	const result: Record<string, string | string[]> = {};
-	let count = 0;
-
-	for (const [key, value] of params.entries()) {
-		count += 1;
-
-		if (parameterLimit !== undefined && count > parameterLimit) {
-			break;
-		}
-
-		const currentValue = result[key];
-
-		if (currentValue === undefined) {
-			result[key] = value;
-			continue;
-		}
-
-		result[key] = Array.isArray(currentValue)
-			? [...currentValue, value]
-			: [currentValue, value];
-	}
-
-	return result;
-}
-
-function parseFastifyUrlencodedBody(
-	body: Buffer,
-	options: Pick<
-		ResolvedUrlencodedBodyParserOptions,
-		| "extended"
-		| "parameterLimit"
-		| "charsetSentinel"
-		| "defaultCharset"
-		| "interpretNumericEntities"
-		| "depth"
-	>,
-) {
-	const encoding = options.defaultCharset === "iso-8859-1" ? "latin1" : "utf8";
-	const rawBody = body.toString(encoding);
-
-	if (options.extended === false) {
-		return parseSimpleFormBody(rawBody, options.parameterLimit);
-	}
-
-	return parseQs(rawBody, {
-		charset: options.defaultCharset === "iso-8859-1" ? "iso-8859-1" : "utf-8",
-		charsetSentinel: options.charsetSentinel,
-		depth: options.depth,
-		interpretNumericEntities: options.interpretNumericEntities,
-		parameterLimit: options.parameterLimit,
-	});
-}
-
-function registerFastifyBodyParser(
-	useBodyParser: FastifyUseBodyParser | undefined,
-	{
-		type,
-		fallbackType,
-		rawBody,
-		limit,
-		parse,
-	}: {
-		type: BodyParserTypeMatcher | undefined;
-		fallbackType: string;
-		rawBody: boolean;
-		limit: BodyParserLimit | undefined;
-		parse: FastifyBodyParserHandler;
-	},
-) {
-	useBodyParser?.(
-		resolveFastifyParserType(type, fallbackType),
-		rawBody,
-		{
-			bodyLimit: resolveFastifyBodyLimit(limit),
-		},
-		(_req: unknown, body: Buffer, done: FastifyBodyParserDone) => {
-			parse(body, done);
-		},
-	);
-}
 
 // biome-ignore lint/suspicious/noExplicitAny: i don't want to cause issues/breaking changes between different ways of setting up better-auth and even versions
 export type Auth = any;
@@ -335,7 +168,7 @@ export class AuthModule
 		}
 
 		if (adapterType === "fastify") {
-			this.configureFastifyBodyParser(bodyParserOptions);
+			configureFastifyBodyParser(this.adapter.httpAdapter, bodyParserOptions);
 		}
 
 		const handler = toNodeHandler(this.options.auth);
@@ -358,63 +191,6 @@ export class AuthModule
 			},
 		);
 		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
-	}
-
-	private configureFastifyBodyParser(
-		bodyParserOptions: ReturnType<typeof resolveBodyParserOptions>,
-	): void {
-		const fastifyInstance = this.adapter.httpAdapter.getInstance() as {
-			removeContentTypeParser?: (contentType: string | string[]) => void;
-		};
-		const useBodyParser = this.adapter.httpAdapter.useBodyParser?.bind(
-			this.adapter.httpAdapter,
-		);
-
-		fastifyInstance.removeContentTypeParser?.([
-			"application/json",
-			"application/x-www-form-urlencoded",
-		]);
-
-		registerFastifyBodyParser(useBodyParser, {
-			type: bodyParserOptions.json.type,
-			fallbackType: "application/json",
-			rawBody: bodyParserOptions.json.rawBody,
-			limit: bodyParserOptions.json.limit,
-			parse: (body, done) => {
-				if (!bodyParserOptions.json.enabled) {
-					done(null, undefined);
-					return;
-				}
-
-				try {
-					done(null, parseFastifyJsonBody(body, bodyParserOptions.json));
-				} catch (error) {
-					done(error as Error);
-				}
-			},
-		});
-
-		registerFastifyBodyParser(useBodyParser, {
-			type: bodyParserOptions.urlencoded.type,
-			fallbackType: "application/x-www-form-urlencoded",
-			rawBody: bodyParserOptions.json.rawBody,
-			limit: bodyParserOptions.urlencoded.limit,
-			parse: (body, done) => {
-				if (!bodyParserOptions.urlencoded.enabled) {
-					done(null, undefined);
-					return;
-				}
-
-				try {
-					done(
-						null,
-						parseFastifyUrlencodedBody(body, bodyParserOptions.urlencoded),
-					);
-				} catch (error) {
-					done(error as Error);
-				}
-			},
-		});
 	}
 
 	private setupHooks(
