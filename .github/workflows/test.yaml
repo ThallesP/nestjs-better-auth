@@ -10,6 +10,12 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        adapter:
+          - express
+          - fastify
 
     steps:
       - name: Checkout code
@@ -26,9 +32,8 @@ jobs:
       - name: Build
         run: bun run build
 
-      - name: Run tests
-        run: bun run test -- --run
+      - name: Run ${{ matrix.adapter }} tests
+        run: bun run test:${{ matrix.adapter }}
         env:
           CI: true
-
 

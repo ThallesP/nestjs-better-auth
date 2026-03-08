@@ -2,13 +2,13 @@ import request from "supertest";
 import { faker } from "@faker-js/faker";
 import { Test } from "@nestjs/testing";
 import { Module, type INestApplication } from "@nestjs/common";
-import { ExpressAdapter } from "@nestjs/platform-express";
 import { betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins/bearer";
 import { organization } from "better-auth/plugins/organization";
 import { admin } from "better-auth/plugins/admin";
 import { AuthModule } from "../../src/index.ts";
 import { TestController } from "../shared/test-controller.ts";
+import { createTestNestApplication } from "../shared/test-utils.ts";
 
 /**
  * Creates a Better Auth instance with organization plugin enabled
@@ -45,11 +45,7 @@ async function createTestAppWithOrganization() {
 		imports: [AppModule],
 	}).compile();
 
-	const app = moduleRef.createNestApplication(new ExpressAdapter(), {
-		bodyParser: false,
-	});
-
-	await app.init();
+	const app = await createTestNestApplication(moduleRef);
 
 	return { app, auth };
 }
