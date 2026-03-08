@@ -13,10 +13,7 @@ import { TestGateway } from "./test-gateway.ts";
 import { admin } from "better-auth/plugins/admin";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { type OPTIONS_TYPE } from "../../src/auth-module-definition.ts";
-import {
-	createTestHttpAdapter,
-	initTestApplication,
-} from "./http-adapter.ts";
+import { createTestHttpAdapter, initTestApplication } from "./http-adapter.ts";
 
 // Create Better Auth instance factory
 export function createTestAuth() {
