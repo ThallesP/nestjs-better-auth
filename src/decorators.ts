@@ -152,10 +152,12 @@ export const Optional = OptionalAuth;
  * Works with both HTTP and GraphQL execution contexts.
  */
 export const Session: ReturnType<typeof createParamDecorator> =
-	createParamDecorator((_data: unknown, context: ExecutionContext): unknown => {
-		const request = getRequestFromContext(context);
-		return request.session;
-	});
+	createParamDecorator(
+		async (_data: unknown, context: ExecutionContext): Promise<unknown> => {
+			const request = await getRequestFromContext(context);
+			return request.session;
+		},
+	);
 /**
  * Represents the context object passed to hooks.
  * This type is derived from the parameters of the createAuthMiddleware function.

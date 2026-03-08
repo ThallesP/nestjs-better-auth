@@ -23,12 +23,12 @@ bun add @thallesp/nestjs-better-auth
 ## Prerequisites
 
 > [!IMPORTANT]  
-> Requires `better-auth` >= 1.3.8. Older versions are deprecated and unsupported.
+> Requires `better-auth` >= 1.5.0. Older versions are deprecated and unsupported.
 
 Before you start, make sure you have:
 
 - A working NestJS application
-- Better Auth (>= 1.3.8) installed and configured ([installation guide](https://www.better-auth.com/docs/installation))
+- Better Auth (>= 1.5.0) installed and configured ([installation guide](https://www.better-auth.com/docs/installation))
 
 ## Basic Setup
 

@@ -13,7 +13,7 @@ import {
 	MetadataScanner,
 } from "@nestjs/core";
 import { toNodeHandler } from "better-auth/node";
-import { createAuthMiddleware } from "better-auth/plugins";
+import { createAuthMiddleware } from "better-auth/api";
 import type { Request, Response } from "express";
 import {
 	type ASYNC_OPTIONS_TYPE,

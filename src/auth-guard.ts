@@ -19,25 +19,6 @@ import {
 import { getRequestFromContext } from "./utils.ts";
 
 /**
- * Lazy-load GraphQLError to make graphql an optional dependency
- */
-
-// biome-ignore lint/suspicious/noExplicitAny: GraphQLError type comes from optional graphql dependency
-let GraphQLErrorClass: any;
-function getGraphQLError() {
-	if (!GraphQLErrorClass) {
-		try {
-			GraphQLErrorClass = require("graphql").GraphQLError;
-		} catch (_error) {
-			throw new Error(
-				"graphql is required for GraphQL support. Please install it: npm install graphql",
-			);
-		}
-	}
-	return GraphQLErrorClass;
-}
-
-/**
  * Type representing a valid user session after authentication
  * Excludes null and undefined values from the session return type
  */
@@ -64,10 +45,10 @@ const AuthErrorType = {
  */
 // biome-ignore lint/suspicious/noExplicitAny: WsException type comes from optional @nestjs/websockets dependency
 let WsException: any;
-function getWsException() {
+async function getWsException() {
 	if (!WsException) {
 		try {
-			WsException = require("@nestjs/websockets").WsException;
+			WsException = (await import("@nestjs/websockets")).WsException;
 		} catch (_error) {
 			throw new Error(
 				"@nestjs/websockets is required for WebSocket support. Please install it: npm install @nestjs/websockets @nestjs/platform-socket.io",
@@ -79,17 +60,17 @@ function getWsException() {
 
 const AuthContextErrorMap: Record<
 	ContextType | "graphql",
-	Record<keyof typeof AuthErrorType, (args?: unknown) => Error>
+	Record<keyof typeof AuthErrorType, (args?: unknown) => Promise<Error>>
 > = {
 	http: {
-		UNAUTHORIZED: (args) =>
+		UNAUTHORIZED: async (args) =>
 			new UnauthorizedException(
 				args ?? {
 					code: "UNAUTHORIZED",
 					message: "Unauthorized",
 				},
 			),
-		FORBIDDEN: (args) =>
+		FORBIDDEN: async (args) =>
 			new ForbiddenException(
 				args ?? {
 					code: "FORBIDDEN",
@@ -98,48 +79,28 @@ const AuthContextErrorMap: Record<
 			),
 	},
 	graphql: {
-		UNAUTHORIZED: (args) => {
-			const GraphQLError = getGraphQLError();
-			if (typeof args === "string") {
-				return new GraphQLError(args);
-			} else if (typeof args === "object") {
-				return new GraphQLError(
-					// biome-ignore lint: if `message` is not set, a default is already in place.
-					(args as any)?.message ?? "Unauthorized",
-					args,
-				);
-			}
-
-			return new GraphQLError("Unauthorized");
+		UNAUTHORIZED: async (args) => {
+			if (args) return new UnauthorizedException(args);
+			return new UnauthorizedException();
 		},
-		FORBIDDEN: (args) => {
-			const GraphQLError = getGraphQLError();
-			if (typeof args === "string") {
-				return new GraphQLError(args);
-			} else if (typeof args === "object") {
-				return new GraphQLError(
-					// biome-ignore lint: if `message` is not set, a default is already in place.
-					(args as any)?.message ?? "Forbidden",
-					args,
-				);
-			}
-
-			return new GraphQLError("Forbidden");
+		FORBIDDEN: async (args) => {
+			if (args) return new ForbiddenException(args);
+			return new ForbiddenException("Insufficient permissions");
 		},
 	},
 	ws: {
-		UNAUTHORIZED: (args) => {
-			const WsExceptionClass = getWsException();
+		UNAUTHORIZED: async (args) => {
+			const WsExceptionClass = await getWsException();
 			return new WsExceptionClass(args ?? "UNAUTHORIZED");
 		},
-		FORBIDDEN: (args) => {
-			const WsExceptionClass = getWsException();
+		FORBIDDEN: async (args) => {
+			const WsExceptionClass = await getWsException();
 			return new WsExceptionClass(args ?? "FORBIDDEN");
 		},
 	},
 	rpc: {
-		UNAUTHORIZED: () => new Error("UNAUTHORIZED"),
-		FORBIDDEN: () => new Error("FORBIDDEN"),
+		UNAUTHORIZED: async () => new Error("UNAUTHORIZED"),
+		FORBIDDEN: async () => new Error("FORBIDDEN"),
 	},
 };
 
@@ -164,7 +125,7 @@ export class AuthGuard implements CanActivate {
 	 * @returns True if the request is authorized to proceed, throws an error otherwise
 	 */
 	async canActivate(context: ExecutionContext): Promise<boolean> {
-		const request = getRequestFromContext(context);
+		const request = await getRequestFromContext(context);
 		const session: UserSession | null = await this.options.auth.api.getSession({
 			headers: fromNodeHeaders(
 				request.headers || request?.handshake?.headers || [],
@@ -189,7 +150,7 @@ export class AuthGuard implements CanActivate {
 		if (!session && isOptional) return true;
 
 		const ctxType = context.getType();
-		if (!session) throw AuthContextErrorMap[ctxType].UNAUTHORIZED();
+		if (!session) throw await AuthContextErrorMap[ctxType].UNAUTHORIZED();
 
 		const headers = fromNodeHeaders(
 			request.headers || request?.handshake?.headers || [],
@@ -203,7 +164,7 @@ export class AuthGuard implements CanActivate {
 
 		if (requiredRoles && requiredRoles.length > 0) {
 			const hasRole = this.checkUserRole(session, requiredRoles);
-			if (!hasRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+			if (!hasRole) throw await AuthContextErrorMap[ctxType].FORBIDDEN();
 		}
 
 		// Check @OrgRoles() - organization member role only
@@ -218,7 +179,7 @@ export class AuthGuard implements CanActivate {
 				headers,
 				requiredOrgRoles,
 			);
-			if (!hasOrgRole) throw AuthContextErrorMap[ctxType].FORBIDDEN();
+			if (!hasOrgRole) throw await AuthContextErrorMap[ctxType].FORBIDDEN();
 		}
 
 		// Check @UserHasPermission() - permission-based access control
