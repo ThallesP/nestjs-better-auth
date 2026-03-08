@@ -170,13 +170,7 @@ export class AuthModule
 
 		if (hasEnabledBodyParser(bodyParserOptions)) {
 			consumer
-				.apply(
-					SkipBodyParsingMiddleware(
-						this.basePath,
-						bodyParserOptions,
-						this.options.rawBody,
-					),
-				)
+				.apply(SkipBodyParsingMiddleware(this.basePath, bodyParserOptions))
 				.forRoutes("*path");
 		}
 

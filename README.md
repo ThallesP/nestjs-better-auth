@@ -69,15 +69,15 @@ import { auth } from "./auth";
       bodyParser: {
         json: { limit: "2mb" },
         urlencoded: { limit: "2mb", extended: true },
+        rawBody: true,
       },
-      rawBody: true,
     }),
   ],
 })
 export class AppModule {}
 ```
 
-Both `bodyParser.json` and `bodyParser.urlencoded` accept the same options as `express.json()` / `express.urlencoded()`, plus an `enabled` flag if you want to disable either parser individually. Set `rawBody` to `true` if you also want Nest-style `req.rawBody` support.
+Both `bodyParser.json` and `bodyParser.urlencoded` accept the same options as `express.json()` / `express.urlencoded()`, plus an `enabled` flag if you want to disable either parser individually. Set `bodyParser.rawBody` to `true` if you also want Nest-style `req.rawBody` support.
 
 ## Route Protection
 
@@ -402,8 +402,8 @@ AuthModule.forRoot({
   bodyParser: {
     json: { enabled: true },
     urlencoded: { enabled: true, extended: true },
+    rawBody: false,
   },
-  rawBody: false,
   disableGlobalAuthGuard: false,
   disableControllers: false,
 });
@@ -414,8 +414,7 @@ The available options are:
 | Option                      | Default | Description                                                                                                                                                              |
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. Use this if you want to handle CORS configuration manually. |
-| `bodyParser`                | Re-adds `express.json()` and `express.urlencoded({ extended: true })` | Configure the body parsers re-added by the module after Nest body parsing is disabled. `json` and `urlencoded` accept the Express options object plus `enabled?: boolean`. |
-| `rawBody`                   | `false` | When set to `true`, also stores the raw request body on `req.rawBody`, similar to Nest's native `rawBody` option. |
+| `bodyParser`                | Re-adds `express.json()` and `express.urlencoded({ extended: true })` | Configure the body parsers re-added by the module after Nest body parsing is disabled. `json` and `urlencoded` accept the Express options object plus `enabled?: boolean`, and `rawBody?: boolean` enables `req.rawBody`. |
 | `disableBodyParser`         | `false` | Deprecated. Equivalent to disabling both `bodyParser.json` and `bodyParser.urlencoded`.                                                                                 |
 | `disableGlobalAuthGuard`    | `false` | When set to `true`, does not register `AuthGuard` as a global guard. Use this if you prefer to apply `AuthGuard` manually or register it yourself via `APP_GUARD`.       |
 | `disableControllers`        | `false` | When set to `true`, does not register any controllers. Use this if you want to handle routes manually.                                                                   |
@@ -433,8 +432,8 @@ AuthModule.forRoot({
     urlencoded: {
       enabled: false,
     },
+    rawBody: true,
   },
-  rawBody: true,
 });
 ```
 

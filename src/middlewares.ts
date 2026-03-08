@@ -73,12 +73,14 @@ function runMiddleware(
 export function SkipBodyParsingMiddleware(
 	basePath = "/api/auth",
 	bodyParser: AuthModuleBodyParserOptions = {},
-	rawBody = false,
 ) {
-	const jsonBodyParser = createJsonBodyParser(bodyParser.json, rawBody);
+	const jsonBodyParser = createJsonBodyParser(
+		bodyParser.json,
+		bodyParser.rawBody,
+	);
 	const urlencodedBodyParser = createUrlencodedBodyParser(
 		bodyParser.urlencoded,
-		rawBody,
+		bodyParser.rawBody,
 	);
 
 	// Return a middleware function compatible with Nest's consumer.apply()

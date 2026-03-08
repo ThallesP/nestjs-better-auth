@@ -16,13 +16,13 @@ type BodyParserMiddlewareOptions<TOptions> = TOptions & {
 export type AuthModuleBodyParserOptions = {
 	json?: BodyParserMiddlewareOptions<ExpressJsonOptions>;
 	urlencoded?: BodyParserMiddlewareOptions<ExpressUrlencodedOptions>;
+	rawBody?: boolean;
 };
 
 export type AuthModuleOptions<A = Auth> = {
 	auth: A;
 	disableTrustedOriginsCors?: boolean;
 	bodyParser?: AuthModuleBodyParserOptions;
-	rawBody?: boolean;
 	/**
 	 * @deprecated Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead.
 	 */
