@@ -117,8 +117,9 @@ describe("options e2e", () => {
 			});
 	});
 
-	it("should expose rawBody when bodyParser.rawBody is enabled", async () => {
+	it("should expose rawBody when rawBody is enabled", async () => {
 		testSetup = await createTestApp({
+			rawBody: true,
 			bodyParser: {
 				json: {
 					limit: "2mb",
@@ -127,7 +128,6 @@ describe("options e2e", () => {
 					enabled: true,
 					extended: true,
 				},
-				rawBody: true,
 			},
 		});
 

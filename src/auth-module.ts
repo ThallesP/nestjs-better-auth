@@ -54,7 +54,9 @@ function resolveBodyParserOptions(
 }
 
 function hasEnabledBodyParser(options: AuthModuleBodyParserOptions): boolean {
-	return (options.json?.enabled ?? true) || (options.urlencoded?.enabled ?? true);
+	return (
+		(options.json?.enabled ?? true) || (options.urlencoded?.enabled ?? true)
+	);
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: i don't want to cause issues/breaking changes between different ways of setting up better-auth and even versions
@@ -168,7 +170,13 @@ export class AuthModule
 
 		if (hasEnabledBodyParser(bodyParserOptions)) {
 			consumer
-				.apply(SkipBodyParsingMiddleware(this.basePath, bodyParserOptions))
+				.apply(
+					SkipBodyParsingMiddleware(
+						this.basePath,
+						bodyParserOptions,
+						this.options.rawBody,
+					),
+				)
 				.forRoutes("*path");
 		}
 
