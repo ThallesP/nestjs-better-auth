@@ -224,11 +224,11 @@ export class AuthGuard implements CanActivate {
 		// Check @UserHasPermission() - permission-based access control
 		const permissionCheck = this.reflector.getAllAndOverride<
 			| {
-				userId?: string;
-				role?: string;
-				permission?: Record<string, string[]>;
-				permissions?: Record<string, string[]>;
-			}
+					userId?: string;
+					role?: string;
+					permission?: Record<string, string[]>;
+					permissions?: Record<string, string[]>;
+			  }
 			| undefined
 		>("USER_HAS_PERMISSION", [context.getHandler(), context.getClass()]);
 
@@ -244,8 +244,8 @@ export class AuthGuard implements CanActivate {
 		// Check @MemberHasPermission() - organization member permission-based access control
 		const memberPermissionCheck = this.reflector.getAllAndOverride<
 			| {
-				permissions: Record<string, string[]>;
-			}
+					permissions: Record<string, string[]>;
+			  }
 			| undefined
 		>("MEMBER_HAS_PERMISSION", [context.getHandler(), context.getClass()]);
 
@@ -434,7 +434,10 @@ export class AuthGuard implements CanActivate {
 			// Log error for debugging but return false to trigger 403 Forbidden
 			// instead of letting the error propagate as a 500
 			console.error("Permission check error:", error);
-			console.error("Permission check body:", JSON.stringify(permissionCheck, null, 2));
+			console.error(
+				"Permission check body:",
+				JSON.stringify(permissionCheck, null, 2),
+			);
 			return false;
 		}
 	}
@@ -496,7 +499,10 @@ export class AuthGuard implements CanActivate {
 			// Log error for debugging but return false to trigger 403 Forbidden
 			// instead of letting the error propagate as a 500
 			console.error("Member permission check error:", error);
-			console.error("Member permission check body:", JSON.stringify(permissionCheck, null, 2));
+			console.error(
+				"Member permission check body:",
+				JSON.stringify(permissionCheck, null, 2),
+			);
 			return false;
 		}
 	}

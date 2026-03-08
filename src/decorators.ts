@@ -131,9 +131,7 @@ export const MemberHasPermission = (
 	options: MemberHasPermissionOptions,
 ): CustomDecorator => {
 	if (!options.permissions) {
-		throw new Error(
-			"MemberHasPermission: 'permissions' must be provided",
-		);
+		throw new Error("MemberHasPermission: 'permissions' must be provided");
 	}
 	return SetMetadata("MEMBER_HAS_PERMISSION", options);
 };
