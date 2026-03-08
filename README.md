@@ -52,7 +52,7 @@ bootstrap();
 
 > [!IMPORTANT]
 > **Side Effect:** Since we disable NestJS's built-in body parser, the `rawBody: true` option in `NestFactory.create()` has no effect.
-> If you need access to `req.rawBody` (e.g., for webhook signature verification), use the `enableRawBodyParser` option in `AuthModule.forRoot()` instead.
+> If you need access to `req.rawBody` (e.g., for webhook signature verification), use `bodyParser.json.rawBody` in `AuthModule.forRoot()` instead.
 > See [Module Options](#module-options) for details.
 
 > [!WARNING]  
@@ -556,6 +556,16 @@ AuthModule.forRoot({
   disableTrustedOriginsCors: false,
   disableBodyParser: false,
   enableRawBodyParser: false,
+  bodyParser: {
+    json: {
+      enabled: true,
+      rawBody: false,
+    },
+    urlencoded: {
+      enabled: true,
+      extended: true,
+    },
+  },
   disableGlobalAuthGuard: false,
   disableControllers: false,
 });
@@ -566,11 +576,39 @@ The available options are:
 | Option                      | Default | Description                                                                                                                                                              |
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. Use this if you want to handle CORS configuration manually. |
-| `disableBodyParser`         | `false` | When set to `true`, disables the automatic body parser middleware. Use this if you want to handle request body parsing manually.                                         |
-| `enableRawBodyParser`       | `false` | When set to `true`, enables raw body parsing and attaches the raw buffer to `req.rawBody`. Use this for webhook signature verification. **Note:** Since this library disables NestJS's built-in body parser, NestJS's `rawBody: true` option has no effect - use this option instead. |
+| `disableBodyParser`         | `false` | Deprecated. Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead. When set to `true`, disables both parsers unless you explicitly re-enable one in `bodyParser`. |
+| `enableRawBodyParser`       | `false` | Deprecated. Use `bodyParser.json.rawBody` instead. When set to `true`, enables raw body parsing and attaches the raw buffer to `req.rawBody`. |
+| `bodyParser`                | `undefined` | Configures the parsers re-added by this library. On Express, supports `bodyParser.json` and `bodyParser.urlencoded`, each with an `enabled` flag. `bodyParser.json` also supports `rawBody`, plus Express `express.json()` options. `bodyParser.urlencoded` supports Express `express.urlencoded()` options. On Fastify, only `bodyParser.json.rawBody` is currently supported. |
 | `disableGlobalAuthGuard`    | `false` | When set to `true`, does not register `AuthGuard` as a global guard. Use this if you prefer to apply `AuthGuard` manually or register it yourself via `APP_GUARD`.       |
 | `disableControllers`        | `false` | When set to `true`, does not register any controllers. Use this if you want to handle routes manually.                                                                   |
 | `middleware`                | `undefined` | Optional middleware function that wraps the Better Auth handler. Receives `(req, res, next)` parameters. Useful for integrating with request-scoped libraries like MikroORM's RequestContext. |
+
+### Body Parser Configuration
+
+Use `bodyParser` to customize the parsers that this library re-adds after you disable Nest's built-in body parser:
+
+```ts
+AuthModule.forRoot({
+  auth,
+  bodyParser: {
+    json: {
+      enabled: true,
+      limit: "2mb",
+      rawBody: true,
+    },
+    urlencoded: {
+      enabled: true,
+      extended: true,
+      limit: "2mb",
+    },
+  },
+});
+```
+
+`bodyParser.json` forwards options to `express.json()`, except that `rawBody` is exposed directly instead of the lower-level `verify` hook. `bodyParser.urlencoded` forwards options to `express.urlencoded()`.
+
+> [!WARNING]
+> Custom body parser options currently only apply to the Express adapter. Fastify support remains beta and is currently limited to `bodyParser.json.rawBody`.
 
 ### Using Custom Middleware
 

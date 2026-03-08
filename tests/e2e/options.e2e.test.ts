@@ -4,6 +4,8 @@ import { InternalServerErrorException } from "@nestjs/common";
 import { MESSAGES } from "@nestjs/core/constants.js";
 import request from "supertest";
 
+const testHttpAdapter = process.env.TEST_HTTP_ADAPTER ?? "express";
+
 describe("options e2e", () => {
 	let testSetup: TestAppSetup;
 
@@ -61,7 +63,30 @@ describe("options e2e", () => {
 		});
 	});
 
-	it("should attach rawBody to request when enableRawBodyParser is true", async () => {
+	it("should attach rawBody to request when bodyParser.json.rawBody is true", async () => {
+		testSetup = await createTestApp({
+			bodyParser: {
+				json: {
+					rawBody: true,
+				},
+			},
+		});
+
+		const httpServer = testSetup.app.getHttpServer();
+
+		const response = await request(httpServer)
+			.post("/test/raw-body")
+			.send({ test: "data" });
+
+		expect(response.status).toBe(201);
+		expect(response.body).toEqual({
+			hasRawBody: true,
+			rawBodyType: "object", // Buffer is typeof "object"
+			isBuffer: true,
+		});
+	});
+
+	it("should still attach rawBody when using deprecated enableRawBodyParser", async () => {
 		testSetup = await createTestApp({
 			enableRawBodyParser: true,
 		});
@@ -75,7 +100,7 @@ describe("options e2e", () => {
 		expect(response.status).toBe(201);
 		expect(response.body).toEqual({
 			hasRawBody: true,
-			rawBodyType: "object", // Buffer is typeof "object"
+			rawBodyType: "object",
 			isBuffer: true,
 		});
 	});
@@ -97,5 +122,106 @@ describe("options e2e", () => {
 			rawBodyType: null,
 			isBuffer: false,
 		});
+	});
+
+	it("should allow disabling only the json parser", async () => {
+		if (testHttpAdapter !== "express") {
+			return;
+		}
+
+		testSetup = await createTestApp({
+			bodyParser: {
+				json: {
+					enabled: false,
+				},
+			},
+		});
+
+		const httpServer = testSetup.app.getHttpServer();
+
+		const response = await request(httpServer)
+			.post("/test/json-body")
+			.send({ test: "data" });
+
+		expect(response.status).toBe(201);
+		expect(response.body).toEqual({
+			hasBody: false,
+			body: null,
+		});
+	});
+
+	it("should allow disabling only the urlencoded parser", async () => {
+		if (testHttpAdapter !== "express") {
+			return;
+		}
+
+		testSetup = await createTestApp({
+			bodyParser: {
+				urlencoded: {
+					enabled: false,
+				},
+			},
+		});
+
+		const httpServer = testSetup.app.getHttpServer();
+
+		const response = await request(httpServer)
+			.post("/test/form-body")
+			.type("form")
+			.send({ test: "data" });
+
+		expect(response.status).toBe(201);
+		expect(response.body).toEqual({
+			hasBody: false,
+			body: null,
+		});
+	});
+
+	it("should allow customizing the json parser limit", async () => {
+		if (testHttpAdapter !== "express") {
+			return;
+		}
+
+		const largePayload = "x".repeat(150_000);
+
+		testSetup = await createTestApp({
+			bodyParser: {
+				json: {
+					limit: "300kb",
+				},
+			},
+		});
+
+		const httpServer = testSetup.app.getHttpServer();
+
+		const response = await request(httpServer)
+			.post("/test/json-body")
+			.send({ payload: largePayload });
+
+		expect(response.status).toBe(201);
+		expect(response.body).toEqual({
+			hasBody: true,
+			body: {
+				payload: largePayload,
+			},
+		});
+	});
+
+	it("should reject unsupported bodyParser options on fastify", async () => {
+		if (testHttpAdapter !== "fastify") {
+			return;
+		}
+
+		await expect(
+			createTestApp({
+				bodyParser: {
+					json: {
+						enabled: false,
+					},
+				},
+			}),
+		).rejects.toThrow(
+			"Custom body parser options are only supported when using the Express adapter.",
+		);
 	});
 });

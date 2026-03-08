@@ -1,7 +1,11 @@
 import type { NextFunction, Request, Response } from "express";
-import type { OptionsJson } from "body-parser";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import * as express from "express";
+import type { AuthModuleOptions } from "./auth-module-definition.ts";
+import type {
+	JsonBodyParserOptions,
+	UrlencodedBodyParserOptions,
+} from "./body-parser-options.ts";
 
 export interface SkipBodyParsingMiddlewareOptions {
 	/**
@@ -9,19 +13,7 @@ export interface SkipBodyParsingMiddlewareOptions {
 	 * @default "/api/auth"
 	 */
 	basePath?: string;
-	/**
-	 * When set to `true`, enables raw body parsing and attaches it to `req.rawBody`.
-	 *
-	 * This is useful for webhook signature verification that requires the raw,
-	 * unparsed request body.
-	 *
-	 * **Important:** Since this library disables NestJS's built-in body parser,
-	 * NestJS's `rawBody: true` option in `NestFactory.create()` has no effect.
-	 * Use `enableRawBodyParser: true` in `AuthModule.forRoot()` instead.
-	 *
-	 * @default false
-	 */
-	enableRawBodyParser?: boolean;
+	bodyParser?: ResolvedBodyParserOptions;
 }
 
 /**
@@ -51,6 +43,57 @@ type ResponseLike = Response & {
 	raw?: Response;
 };
 
+export type ResolvedJsonBodyParserOptions = JsonBodyParserOptions & {
+	enabled: boolean;
+	rawBody: boolean;
+};
+
+export type ResolvedUrlencodedBodyParserOptions =
+	UrlencodedBodyParserOptions & {
+		enabled: boolean;
+	};
+
+export type ResolvedBodyParserOptions = {
+	json: ResolvedJsonBodyParserOptions;
+	urlencoded: ResolvedUrlencodedBodyParserOptions;
+};
+
+export function resolveBodyParserOptions(
+	options: Pick<
+		AuthModuleOptions,
+		"bodyParser" | "disableBodyParser" | "enableRawBodyParser"
+	> = {},
+): ResolvedBodyParserOptions {
+	const bodyParserEnabledByDefault = !options.disableBodyParser;
+
+	const jsonOptions = options.bodyParser?.json;
+	const urlencodedOptions = options.bodyParser?.urlencoded;
+
+	const {
+		enabled: jsonEnabled = bodyParserEnabledByDefault,
+		rawBody = options.enableRawBodyParser ?? false,
+		...jsonParserOptions
+	} = jsonOptions ?? {};
+	const {
+		enabled: urlencodedEnabled = bodyParserEnabledByDefault,
+		extended = true,
+		...urlencodedParserOptions
+	} = urlencodedOptions ?? {};
+
+	return {
+		json: {
+			enabled: jsonEnabled,
+			rawBody,
+			...jsonParserOptions,
+		},
+		urlencoded: {
+			enabled: urlencodedEnabled,
+			extended,
+			...urlencodedParserOptions,
+		},
+	};
+}
+
 export function getRequestPath(req: RequestLike) {
 	return req.originalUrl ?? req.url ?? req.baseUrl ?? req.raw?.url ?? "";
 }
@@ -76,11 +119,26 @@ export function matchesBasePath(req: RequestLike, basePath: string) {
 export function SkipBodyParsingMiddleware(
 	options: SkipBodyParsingMiddlewareOptions = {},
 ) {
-	const { basePath = "/api/auth", enableRawBodyParser = false } = options;
+	const { basePath = "/api/auth", bodyParser = resolveBodyParserOptions() } =
+		options;
 
-	const jsonParserOptions: OptionsJson = enableRawBodyParser
-		? { verify: rawBodyParser }
-		: {};
+	const {
+		enabled: jsonEnabled,
+		rawBody,
+		...jsonParserOptions
+	} = bodyParser.json;
+	const { enabled: urlencodedEnabled, ...urlencodedParserOptions } =
+		bodyParser.urlencoded;
+
+	const expressJsonParserOptions = rawBody
+		? { ...jsonParserOptions, verify: rawBodyParser }
+		: jsonParserOptions;
+	const jsonParser = jsonEnabled
+		? express.json(expressJsonParserOptions as never)
+		: null;
+	const urlencodedParser = urlencodedEnabled
+		? express.urlencoded(urlencodedParserOptions as never)
+		: null;
 
 	// Return a middleware function compatible with Nest's consumer.apply()
 	// NestJS consumer.apply() accepts plain functions directly
@@ -93,12 +151,25 @@ export function SkipBodyParsingMiddleware(
 		const nodeReq = getNodeRequest(req);
 		const nodeRes = getNodeResponse(res);
 
-		express.json(jsonParserOptions)(nodeReq, nodeRes, (err) => {
+		const runUrlencodedParser = (err?: unknown) => {
 			if (err) {
 				next(err);
 				return;
 			}
-			express.urlencoded({ extended: true })(nodeReq, nodeRes, next);
-		});
+
+			if (!urlencodedParser) {
+				next();
+				return;
+			}
+
+			urlencodedParser(nodeReq, nodeRes, next);
+		};
+
+		if (!jsonParser) {
+			runUrlencodedParser();
+			return;
+		}
+
+		jsonParser(nodeReq, nodeRes, runUrlencodedParser);
 	};
 }

@@ -1,13 +1,15 @@
 import { ConfigurableModuleBuilder } from "@nestjs/common";
 import type { Auth } from "./auth-module.ts";
 import type { Request, Response, NextFunction } from "express";
+import type {
+	JsonBodyParserOptions,
+	UrlencodedBodyParserOptions,
+} from "./body-parser-options.ts";
 
-export type AuthModuleOptions<A = Auth> = {
-	auth: A;
-	disableTrustedOriginsCors?: boolean;
-	disableBodyParser?: boolean;
+export type AuthModuleJsonBodyParserOptions = JsonBodyParserOptions & {
+	enabled?: boolean;
 	/**
-	 * When set to `true`, enables raw body parsing and attaches it to `req.rawBody`.
+	 * When set to `true`, attaches the raw request buffer to `req.rawBody`.
 	 *
 	 * This is useful for webhook signature verification that requires the raw,
 	 * unparsed request body.
@@ -18,7 +20,31 @@ export type AuthModuleOptions<A = Auth> = {
 	 *
 	 * @default false
 	 */
+	rawBody?: boolean;
+};
+
+export type AuthModuleUrlencodedBodyParserOptions =
+	UrlencodedBodyParserOptions & {
+		enabled?: boolean;
+	};
+
+export type AuthModuleBodyParserOptions = {
+	json?: AuthModuleJsonBodyParserOptions;
+	urlencoded?: AuthModuleUrlencodedBodyParserOptions;
+};
+
+export type AuthModuleOptions<A = Auth> = {
+	auth: A;
+	disableTrustedOriginsCors?: boolean;
+	/**
+	 * @deprecated Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead.
+	 */
+	disableBodyParser?: boolean;
+	/**
+	 * @deprecated Use `bodyParser.json.rawBody` instead.
+	 */
 	enableRawBodyParser?: boolean;
+	bodyParser?: AuthModuleBodyParserOptions;
 	middleware?: (req: Request, res: Response, next: NextFunction) => void;
 };
 

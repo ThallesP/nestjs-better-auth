@@ -28,6 +28,7 @@ import {
 	getNodeRequest,
 	getNodeResponse,
 	matchesBasePath,
+	resolveBodyParserOptions,
 } from "./middlewares.ts";
 import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
 import { AuthGuard } from "./auth-guard.ts";
@@ -122,6 +123,7 @@ export class AuthModule
 	configure(consumer: MiddlewareConsumer): void {
 		const adapterType = this.adapter.httpAdapter.getType();
 		const trustedOrigins = this.options.auth.options.trustedOrigins;
+		const bodyParserOptions = resolveBodyParserOptions(this.options);
 		// function-based trustedOrigins requires a Request (from web-apis) object to evaluate, which is not available in NestJS (we only have a express Request object)
 		// if we ever need this, take a look at better-call which show an implementation for this
 		const isNotFunctionBased = trustedOrigins && Array.isArray(trustedOrigins);
@@ -141,22 +143,19 @@ export class AuthModule
 				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
 			);
 
-		if (!this.options.disableBodyParser && adapterType !== "fastify") {
+		if (adapterType !== "fastify") {
 			consumer
 				.apply(
 					SkipBodyParsingMiddleware({
 						basePath: this.basePath,
-						enableRawBodyParser: this.options.enableRawBodyParser,
+						bodyParser: bodyParserOptions,
 					}),
 				)
 				.forRoutes("*path");
 		}
 
-		if (!this.options.disableBodyParser && adapterType === "fastify") {
-			this.adapter.httpAdapter.registerParserMiddleware?.(
-				undefined,
-				this.options.enableRawBodyParser,
-			);
+		if (adapterType === "fastify") {
+			this.configureFastifyBodyParser();
 		}
 
 		const handler = toNodeHandler(this.options.auth);
@@ -179,6 +178,29 @@ export class AuthModule
 			},
 		);
 		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
+	}
+
+	private configureFastifyBodyParser(): void {
+		const jsonOptions = this.options.bodyParser?.json;
+		const urlencodedOptions = this.options.bodyParser?.urlencoded;
+		const jsonHasUnsupportedOptions = Object.keys(jsonOptions ?? {}).some(
+			(key) => !["rawBody"].includes(key),
+		);
+		const hasUnsupportedOptions =
+			jsonHasUnsupportedOptions || urlencodedOptions !== undefined;
+
+		if (hasUnsupportedOptions) {
+			throw new Error(
+				"Custom body parser options are only supported when using the Express adapter. Fastify support is currently limited to bodyParser.json.rawBody and the deprecated disableBodyParser option.",
+			);
+		}
+
+		if (!this.options.disableBodyParser) {
+			this.adapter.httpAdapter.registerParserMiddleware?.(
+				undefined,
+				jsonOptions?.rawBody ?? this.options.enableRawBodyParser,
+			);
+		}
 	}
 
 	private setupHooks(

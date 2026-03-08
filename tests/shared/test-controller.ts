@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Request } from "@nestjs/common";
+import { Body, Controller, Get, Post, Request } from "@nestjs/common";
 import {
 	OptionalAuth,
 	AllowAnonymous,
@@ -72,6 +72,24 @@ export class TestController {
 			hasRawBody: !!req.rawBody,
 			rawBodyType: req.rawBody ? typeof req.rawBody : null,
 			isBuffer: req.rawBody instanceof Buffer,
+		};
+	}
+
+	@AllowAnonymous()
+	@Post("json-body")
+	jsonBody(@Body() body: unknown) {
+		return {
+			hasBody: body !== undefined,
+			body: body ?? null,
+		};
+	}
+
+	@AllowAnonymous()
+	@Post("form-body")
+	formBody(@Body() body: unknown) {
+		return {
+			hasBody: body !== undefined,
+			body: body ?? null,
 		};
 	}
 }
