@@ -23,7 +23,12 @@ import {
 	type OPTIONS_TYPE,
 } from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
-import { SkipBodyParsingMiddleware } from "./middlewares.ts";
+import {
+	SkipBodyParsingMiddleware,
+	getNodeRequest,
+	getNodeResponse,
+	matchesBasePath,
+} from "./middlewares.ts";
 import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
 import { AuthGuard } from "./auth-guard.ts";
 import { APP_GUARD } from "@nestjs/core";
@@ -115,6 +120,7 @@ export class AuthModule
 	}
 
 	configure(consumer: MiddlewareConsumer): void {
+		const adapterType = this.adapter.httpAdapter.getType();
 		const trustedOrigins = this.options.auth.options.trustedOrigins;
 		// function-based trustedOrigins requires a Request (from web-apis) object to evaluate, which is not available in NestJS (we only have a express Request object)
 		// if we ever need this, take a look at better-call which show an implementation for this
@@ -135,7 +141,7 @@ export class AuthModule
 				"Function-based trustedOrigins not supported in NestJS. Use string array or disable CORS with disableTrustedOriginsCors: true.",
 			);
 
-		if (!this.options.disableBodyParser) {
+		if (!this.options.disableBodyParser && adapterType !== "fastify") {
 			consumer
 				.apply(
 					SkipBodyParsingMiddleware({
@@ -146,15 +152,32 @@ export class AuthModule
 				.forRoutes("*path");
 		}
 
+		if (!this.options.disableBodyParser && adapterType === "fastify") {
+			this.adapter.httpAdapter.registerParserMiddleware?.(
+				undefined,
+				this.options.enableRawBodyParser,
+			);
+		}
+
 		const handler = toNodeHandler(this.options.auth);
-		consumer
-			.apply((req: Request, res: Response) => {
-				if (this.options.middleware) {
-					return this.options.middleware(req, res, () => handler(req, res));
+		this.adapter.httpAdapter.use(
+			(req: Request, res: Response, next: () => void) => {
+				if (!matchesBasePath(req, this.basePath)) {
+					next();
+					return;
 				}
-				return handler(req, res);
-			})
-			.forRoutes(this.basePath);
+
+				const nodeReq = getNodeRequest(req);
+				const nodeRes = getNodeResponse(res);
+
+				if (this.options.middleware) {
+					return this.options.middleware(req, res, () =>
+						handler(nodeReq, nodeRes),
+					);
+				}
+				return handler(nodeReq, nodeRes);
+			},
+		);
 		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
 	}
 

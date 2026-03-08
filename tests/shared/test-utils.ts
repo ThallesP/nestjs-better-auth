@@ -1,10 +1,11 @@
 import "reflect-metadata";
-import { Test } from "@nestjs/testing";
+import { Test, type TestingModule } from "@nestjs/testing";
 import { Module, type INestApplication } from "@nestjs/common";
 import { GraphQLModule } from "@nestjs/graphql";
 import { ApolloDriver, type ApolloDriverConfig } from "@nestjs/apollo";
 import type { Request, Response } from "express";
 import { ExpressAdapter } from "@nestjs/platform-express";
+import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { bearer } from "better-auth/plugins/bearer";
 import { AuthModule } from "../../src/index.ts";
 import { betterAuth } from "better-auth";
@@ -71,6 +72,45 @@ export function createTestAppModule(
 // Factory function to create and configure a test NestJS application
 export interface TestAppOptions {
 	globalPrefix?: string;
+	initialize?: boolean;
+}
+
+export type TestHttpAdapter = "express" | "fastify";
+
+export function getTestHttpAdapter(): TestHttpAdapter {
+	const adapter = process.env.TEST_HTTP_ADAPTER;
+
+	if (adapter === "fastify") {
+		return "fastify";
+	}
+
+	return "express";
+}
+
+function createHttpAdapter() {
+	return getTestHttpAdapter() === "fastify"
+		? new FastifyAdapter()
+		: new ExpressAdapter();
+}
+
+export async function createTestNestApplication(
+	moduleRef: TestingModule,
+	appOptions?: TestAppOptions,
+) {
+	const app = moduleRef.createNestApplication(createHttpAdapter(), {
+		bodyParser: false,
+	});
+
+	if (appOptions?.globalPrefix) {
+		app.setGlobalPrefix(appOptions.globalPrefix);
+	}
+
+	if (appOptions?.initialize !== false) {
+		await app.init();
+		await app.getHttpAdapter().getInstance().ready?.();
+	}
+
+	return app;
 }
 
 export async function createTestApp(
@@ -85,15 +125,7 @@ export async function createTestApp(
 		imports: [AppModule],
 	}).compile();
 
-	const app = moduleRef.createNestApplication(new ExpressAdapter(), {
-		bodyParser: false,
-	});
-
-	if (appOptions?.globalPrefix) {
-		app.setGlobalPrefix(appOptions.globalPrefix);
-	}
-
-	await app.init();
+	const app = await createTestNestApplication(moduleRef, appOptions);
 
 	return { app, auth };
 }
