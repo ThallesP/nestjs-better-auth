@@ -83,6 +83,8 @@ Both `bodyParser.json` and `bodyParser.urlencoded` accept parser options plus an
 
 On Fastify, `bodyParser.urlencoded` with `extended: true` uses the optional peer dependency `qs`. Install `qs` in your application if you want nested URL-encoded parsing there.
 
+If you configure `trustedOrigins`, this module also applies Better Auth CORS headers for auth routes. On Fastify, Better Auth routes are mounted through middleware, so app-level `@fastify/cors` does not fully cover them by itself.
+
 ## Route Protection
 
 **Global by default**: An `AuthGuard` is registered globally by this module. All routes are protected unless you explicitly allow access with `@AllowAnonymous()` or mark them as optional with `@OptionalAuth()`.
@@ -580,7 +582,7 @@ The available options are:
 
 | Option                      | Default | Description                                                                                                                                                              |
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. Use this if you want to handle CORS configuration manually. |
+| `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. On Fastify, use this only if you want to fully manage Better Auth route CORS yourself. |
 | `bodyParser`                | Re-adds JSON and URL-encoded body parsers | Configure the body parsers re-added by the module after Nest body parsing is disabled. `json` and `urlencoded` accept the parser options object plus `enabled?: boolean`, and `rawBody?: boolean` enables `req.rawBody`. |
 | `disableBodyParser`         | `false` | Deprecated. Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead. When set to `true`, disables both parsers unless you explicitly re-enable one in `bodyParser`. |
 | `enableRawBodyParser`       | `false` | Deprecated. Use `bodyParser.rawBody` instead. When set to `true`, enables raw body parsing and attaches the raw buffer to `req.rawBody`. |
@@ -612,6 +614,20 @@ AuthModule.forRoot({
 `bodyParser.rawBody` enables `req.rawBody` support, while `bodyParser.json` and `bodyParser.urlencoded` configure the corresponding parser behavior for the active adapter.
 
 If you use Fastify with `bodyParser.urlencoded({ extended: true })`, install the optional peer dependency `qs` to enable nested form parsing.
+
+### CORS on Fastify
+
+If your Better Auth config sets `trustedOrigins`, this module applies CORS to Better Auth routes automatically.
+
+On Fastify, Better Auth routes are served through middleware internally. Because of that:
+
+- app-level `@fastify/cors` does not fully apply to Better Auth routes on its own
+- this module applies Better Auth route CORS from `trustedOrigins`
+- if `@fastify/cors` is already registered, this module skips duplicate Fastify CORS registration and logs a warning once
+
+This Fastify fallback only supports array-based `trustedOrigins`. Function-based `trustedOrigins` remain unsupported unless you set `disableTrustedOriginsCors: true` and manage Better Auth route CORS manually.
+
+Set `disableTrustedOriginsCors: true` only if you want to fully manage Better Auth route CORS yourself.
 
 ### Using Custom Middleware
 
