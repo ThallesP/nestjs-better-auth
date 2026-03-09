@@ -1,0 +1,123 @@
+name: Bug report
+description: Report a reproducible problem with @thallesp/nestjs-better-auth
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an issue. Please include exact versions and a minimal public reproduction so the problem can be verified quickly.
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened?
+      description: Describe the bug or incorrect behavior.
+      placeholder: Requests fail with a 403 when @OptionalAuth() is used on a GraphQL resolver.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+      description: Describe what you expected to happen instead.
+      placeholder: The resolver should allow anonymous access and return data without requiring a session.
+    validations:
+      required: true
+
+  - type: input
+    id: package_version
+    attributes:
+      label: Package version
+      description: Version of @thallesp/nestjs-better-auth you are using.
+      placeholder: 2.4.0
+    validations:
+      required: true
+
+  - type: input
+    id: better_auth_version
+    attributes:
+      label: better-auth version
+      placeholder: 1.7.3
+    validations:
+      required: true
+
+  - type: input
+    id: nest_version
+    attributes:
+      label: NestJS version
+      placeholder: 11.1.6
+    validations:
+      required: true
+
+  - type: input
+    id: node_version
+    attributes:
+      label: Node.js version
+      placeholder: 22.22.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: HTTP adapter / surface
+      description: Pick the runtime surface where the issue happens.
+      options:
+        - express
+        - fastify
+        - graphql
+        - websocket
+        - other
+    validations:
+      required: true
+
+  - type: input
+    id: reproduction
+    attributes:
+      label: Reproducible example
+      description: Link a public GitHub repo or a minimal reproduction.
+      placeholder: https://github.com/your-name/repro-repo
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Steps to reproduce
+      description: List the shortest sequence of steps needed to trigger the issue.
+      placeholder: |
+        1. Install the package
+        2. Configure AuthModule.forRoot(...)
+        3. Start the app
+        4. Send a request to ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Optional context such as OS, package manager, Bun/npm/pnpm, deployment target, or anything else relevant.
+      placeholder: macOS 15.3, pnpm 10, Bun 1.2.22, local dev server
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / stack trace
+      description: Paste any relevant logs, stack traces, or error output.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues before opening this report.
+          required: true
+        - label: I tested against the latest package version available to me.
+          required: true
+        - label: My reproduction isolates the problem as much as reasonably possible.
+          required: true
