@@ -55,9 +55,6 @@ bootstrap();
 > If you need access to `req.rawBody` (e.g., for webhook signature verification), use `bodyParser.rawBody` in `AuthModule.forRoot()` instead.
 > See [Module Options](#module-options) for details.
 
-> [!WARNING]  
-> Currently the library has beta support for Fastify, if you experience any issues with it, please open an issue.
-
 **2. Import AuthModule**
 
 Import the `AuthModule` in your root module:
