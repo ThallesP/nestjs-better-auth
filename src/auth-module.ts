@@ -28,6 +28,7 @@ import {
 	SkipBodyParsingMiddleware,
 	getNodeRequest,
 	getNodeResponse,
+	handleFastifyTrustedOriginsCors,
 	matchesBasePath,
 	resolveBodyParserOptions,
 } from "./middlewares.ts";
@@ -130,11 +131,32 @@ export class AuthModule
 		const isNotFunctionBased = trustedOrigins && Array.isArray(trustedOrigins);
 
 		if (!this.options.disableTrustedOriginsCors && isNotFunctionBased) {
-			this.adapter.httpAdapter.enableCors({
-				origin: trustedOrigins,
-				methods: ["GET", "POST", "PUT", "DELETE"],
-				credentials: true,
-			});
+			if (adapterType === "fastify") {
+				const fastifyInstance = this.adapter.httpAdapter.getInstance<{
+					hasRequestDecorator?: (name: string) => boolean;
+				}>();
+				const hasFastifyCorsRegistered =
+					fastifyInstance?.hasRequestDecorator?.("corsPreflightEnabled") ??
+					false;
+
+				if (hasFastifyCorsRegistered) {
+					this.logger.warn(
+						"Detected an existing @fastify/cors registration. Skipping automatic Fastify CORS registration for Better Auth trustedOrigins to avoid duplicate plugin registration. Better Auth routes will still apply CORS from trustedOrigins. Set disableTrustedOriginsCors: true if you want to fully manage Better Auth CORS yourself.",
+					);
+				} else {
+					this.adapter.httpAdapter.enableCors({
+						origin: trustedOrigins,
+						methods: ["GET", "POST", "PUT", "DELETE"],
+						credentials: true,
+					});
+				}
+			} else {
+				this.adapter.httpAdapter.enableCors({
+					origin: trustedOrigins,
+					methods: ["GET", "POST", "PUT", "DELETE"],
+					credentials: true,
+				});
+			}
 		} else if (
 			trustedOrigins &&
 			!this.options.disableTrustedOriginsCors &&
@@ -176,6 +198,17 @@ export class AuthModule
 			(req: Request, res: Response, next: () => void) => {
 				if (!matchesBasePath(req, this.basePath)) {
 					next();
+					return;
+				}
+
+				if (
+					adapterType === "fastify" &&
+					!this.options.disableTrustedOriginsCors &&
+					isNotFunctionBased &&
+					handleFastifyTrustedOriginsCors(req, res, {
+						trustedOrigins,
+					})
+				) {
 					return;
 				}
 

@@ -15,8 +15,11 @@ import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { type OPTIONS_TYPE } from "../../src/auth-module-definition.ts";
 import { createTestHttpAdapter, initTestApplication } from "./http-adapter.ts";
 
+type BetterAuthOptions = Parameters<typeof betterAuth>[0];
+type TestHttpAdapter = ReturnType<typeof createTestHttpAdapter>;
+
 // Create Better Auth instance factory
-export function createTestAuth() {
+export function createTestAuth(authOptions?: Partial<BetterAuthOptions>) {
 	return betterAuth({
 		basePath: "/api/auth",
 		emailAndPassword: {
@@ -32,6 +35,7 @@ export function createTestAuth() {
 				},
 			}),
 		],
+		...authOptions,
 	});
 }
 
@@ -72,13 +76,19 @@ export function createTestAppModule(
 export interface TestAppOptions {
 	globalPrefix?: string;
 	initialize?: boolean;
+	authOptions?: Partial<BetterAuthOptions>;
+	configureAdapter?: (adapter: TestHttpAdapter) => Promise<void> | void;
 }
 
 export async function createTestNestApplication(
 	moduleRef: TestingModule,
 	appOptions?: TestAppOptions,
 ) {
-	const app = moduleRef.createNestApplication(createTestHttpAdapter(), {
+	const adapter = createTestHttpAdapter();
+
+	await appOptions?.configureAdapter?.(adapter);
+
+	const app = moduleRef.createNestApplication(adapter, {
 		bodyParser: false,
 	});
 
@@ -98,7 +108,7 @@ export async function createTestApp(
 	async = false,
 	appOptions?: TestAppOptions,
 ) {
-	const auth = createTestAuth();
+	const auth = createTestAuth(appOptions?.authOptions);
 	const AppModule = createTestAppModule(async, auth, options);
 
 	const moduleRef = await Test.createTestingModule({
