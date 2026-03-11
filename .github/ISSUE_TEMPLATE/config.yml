@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and help
+    url: https://github.com/ThallesP/nestjs-better-auth/discussions/categories/q-a
+    about: Ask usage questions or request troubleshooting help in Discussions Q&A.
+  - name: Feature requests and ideas
+    url: https://github.com/ThallesP/nestjs-better-auth/discussions/categories/ideas
+    about: Share suggestions and vote on ideas in Discussions.
