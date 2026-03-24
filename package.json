@@ -86,6 +86,9 @@
 		"@nestjs/websockets": {
 			"optional": true
 		},
+		"express": {
+			"optional": true
+		},
 		"graphql": {
 			"optional": true
 		},

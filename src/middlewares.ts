@@ -1,11 +1,24 @@
-import type { NextFunction, Request, Response } from "express";
-import * as express from "express";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { createRequire } from "node:module";
 import type { AuthModuleOptions } from "./auth-module-definition.ts";
 import type {
 	JsonBodyParserOptions,
 	UrlencodedBodyParserOptions,
 } from "./body-parser-options.ts";
+
+const require = createRequire(import.meta.url);
+
+type MiddlewareNext = (error?: unknown) => void;
+type BodyParserHandler = (
+	req: IncomingMessage,
+	res: ServerResponse<IncomingMessage>,
+	next: MiddlewareNext,
+) => void;
+
+type ExpressBodyParserModule = {
+	json(options?: unknown): BodyParserHandler;
+	urlencoded(options?: unknown): BodyParserHandler;
+};
 
 export interface SkipBodyParsingMiddlewareOptions {
 	/**
@@ -32,15 +45,15 @@ const rawBodyParser = (
 	return true;
 };
 
-type RequestLike = Request & {
-	raw?: Request;
+type RequestLike = IncomingMessage & {
+	raw?: IncomingMessage;
 	originalUrl?: string;
 	url?: string;
 	baseUrl?: string;
 };
 
-type ResponseLike = Response & {
-	raw?: Response;
+type ResponseLike = ServerResponse<IncomingMessage> & {
+	raw?: ServerResponse<IncomingMessage>;
 };
 
 type NodeRequestLike = IncomingMessage & {
@@ -53,6 +66,10 @@ type NodeResponseLike = ServerResponse<IncomingMessage> & {
 	setHeader(name: string, value: number | string | readonly string[]): this;
 	statusCode: number;
 };
+
+function getExpressBodyParser(): ExpressBodyParserModule {
+	return require("express") as ExpressBodyParserModule;
+}
 
 export type ResolvedJsonBodyParserOptions = JsonBodyParserOptions & {
 	enabled: boolean;
@@ -228,6 +245,7 @@ export function SkipBodyParsingMiddleware(
 ) {
 	const { basePath = "/api/auth", bodyParser = resolveBodyParserOptions() } =
 		options;
+	const express = getExpressBodyParser();
 
 	const {
 		enabled: jsonEnabled,
@@ -247,7 +265,7 @@ export function SkipBodyParsingMiddleware(
 		? express.urlencoded(urlencodedParserOptions as never)
 		: null;
 
-	return (req: RequestLike, res: ResponseLike, next: NextFunction): void => {
+	return (req: RequestLike, res: ResponseLike, next: MiddlewareNext): void => {
 		if (matchesBasePath(req, basePath)) {
 			next();
 			return;
