@@ -1,5 +1,5 @@
 import { ConfigurableModuleBuilder } from "@nestjs/common";
-import type { NextFunction, Request, Response } from "express";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Auth } from "./auth-module.ts";
 import type {
 	JsonBodyParserOptions,
@@ -45,7 +45,7 @@ export type AuthModuleOptions<A = Auth> = {
 	 */
 	enableRawBodyParser?: boolean;
 	bodyParser?: AuthModuleBodyParserOptions;
-	middleware?: (req: Request, res: Response, next: NextFunction) => void;
+	middleware?: (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 };
 
 export const MODULE_OPTIONS_TOKEN = Symbol("AUTH_MODULE_OPTIONS");

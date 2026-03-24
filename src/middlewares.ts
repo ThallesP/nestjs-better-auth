@@ -1,6 +1,5 @@
-import type { NextFunction, Request, Response } from "express";
-import * as express from "express";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { createRequire } from "node:module";
 import type { AuthModuleOptions } from "./auth-module-definition.ts";
 import type {
 	JsonBodyParserOptions,
@@ -32,15 +31,14 @@ const rawBodyParser = (
 	return true;
 };
 
-type RequestLike = Request & {
-	raw?: Request;
+type RequestLike = IncomingMessage & {
+	raw?: IncomingMessage;
 	originalUrl?: string;
-	url?: string;
 	baseUrl?: string;
 };
 
-type ResponseLike = Response & {
-	raw?: Response;
+type ResponseLike = ServerResponse & {
+	raw?: ServerResponse;
 };
 
 export type ResolvedJsonBodyParserOptions = JsonBodyParserOptions & {
@@ -112,6 +110,24 @@ export function matchesBasePath(req: RequestLike, basePath: string) {
 	return requestPath === basePath || requestPath.startsWith(`${basePath}/`);
 }
 
+function loadExpress() {
+	const require = createRequire(import.meta.url);
+
+	try {
+		return require("express") as typeof import("express");
+	} catch (error) {
+		const moduleError = error as NodeJS.ErrnoException;
+
+		if (moduleError.code === "MODULE_NOT_FOUND") {
+			throw new Error(
+				"The Express adapter requires the 'express' package to be installed. Install 'express' in your application.",
+			);
+		}
+
+		throw error;
+	}
+}
+
 /**
  * Factory that returns a Nest middleware which skips body parsing for the
  * configured basePath.
@@ -121,6 +137,8 @@ export function SkipBodyParsingMiddleware(
 ) {
 	const { basePath = "/api/auth", bodyParser = resolveBodyParserOptions() } =
 		options;
+
+	const express = loadExpress();
 
 	const {
 		enabled: jsonEnabled,
@@ -140,7 +158,7 @@ export function SkipBodyParsingMiddleware(
 		? express.urlencoded(urlencodedParserOptions as never)
 		: null;
 
-	return (req: RequestLike, res: ResponseLike, next: NextFunction): void => {
+	return (req: RequestLike, res: ResponseLike, next: (err?: unknown) => void): void => {
 		if (matchesBasePath(req, basePath)) {
 			next();
 			return;

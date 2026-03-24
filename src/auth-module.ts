@@ -14,7 +14,7 @@ import {
 } from "@nestjs/core";
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/api";
-import type { Request, Response } from "express";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import {
 	type ASYNC_OPTIONS_TYPE,
 	type AuthModuleOptions,
@@ -173,7 +173,7 @@ export class AuthModule
 
 		const handler = toNodeHandler(this.options.auth);
 		this.adapter.httpAdapter.use(
-			(req: Request, res: Response, next: () => void) => {
+			(req: IncomingMessage, res: ServerResponse, next: () => void) => {
 				if (!matchesBasePath(req, this.basePath)) {
 					next();
 					return;
