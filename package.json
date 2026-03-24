@@ -1,6 +1,6 @@
 {
 	"name": "@thallesp/nestjs-better-auth",
-	"version": "2.5.1",
+	"version": "2.5.2",
 	"description": "Better Auth for NestJS",
 	"author": "Thalles Passos",
 	"license": "MIT",
@@ -84,6 +84,9 @@
 			"optional": true
 		},
 		"@nestjs/websockets": {
+			"optional": true
+		},
+		"express": {
 			"optional": true
 		},
 		"graphql": {

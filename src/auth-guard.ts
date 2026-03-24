@@ -256,28 +256,23 @@ export class AuthGuard implements CanActivate {
 	private async getMemberRoleInOrganization(
 		headers: Headers,
 	): Promise<string | undefined> {
-		try {
-			// Better Auth organization plugin exposes getActiveMemberRole or getActiveMember API
-			// biome-ignore lint/suspicious/noExplicitAny: Better Auth API types vary by plugin configuration
-			const authApi = this.options.auth.api as any;
+		// Better Auth organization plugin exposes getActiveMemberRole or getActiveMember API
+		// biome-ignore lint/suspicious/noExplicitAny: Better Auth API types vary by plugin configuration
+		const authApi = this.options.auth.api as any;
 
-			// Try getActiveMemberRole first (most direct for our use case)
-			if (typeof authApi.getActiveMemberRole === "function") {
-				const result = await authApi.getActiveMemberRole({ headers });
-				return result?.role;
-			}
-
-			// Fallback: try getActiveMember
-			if (typeof authApi.getActiveMember === "function") {
-				const member = await authApi.getActiveMember({ headers });
-				return member?.role;
-			}
-
-			return undefined;
-		} catch (error) {
-			// Re-throw to surface organization plugin errors
-			throw error;
+		// Try getActiveMemberRole first (most direct for our use case)
+		if (typeof authApi.getActiveMemberRole === "function") {
+			const result = await authApi.getActiveMemberRole({ headers });
+			return result?.role;
 		}
+
+		// Fallback: try getActiveMember
+		if (typeof authApi.getActiveMember === "function") {
+			const member = await authApi.getActiveMember({ headers });
+			return member?.role;
+		}
+
+		return undefined;
 	}
 
 	/**
