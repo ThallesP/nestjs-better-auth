@@ -14,6 +14,7 @@ import {
 } from "@nestjs/core";
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/api";
+import type { Request as ExpressRequest, Response as ExpressResponse } from "express";
 import {
 	type ASYNC_OPTIONS_TYPE,
 	type AuthModuleOptions,
@@ -41,6 +42,17 @@ const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
 	{ metadataKey: AFTER_HOOK_KEY, hookType: "after" as const },
 ];
+
+type AdapterRequest = ExpressRequest & {
+	raw?: ExpressRequest;
+	originalUrl?: string;
+	url?: string;
+	baseUrl?: string;
+};
+
+type AdapterResponse = ExpressResponse & {
+	raw?: ExpressResponse;
+};
 
 // biome-ignore lint/suspicious/noExplicitAny: i don't want to cause issues/breaking changes between different ways of setting up better-auth and even versions
 export type Auth = any;
@@ -193,6 +205,38 @@ export class AuthModule
 		}
 
 		const handler = toNodeHandler(this.options.auth);
+		const authHandler = (
+			req: AdapterRequest,
+			res: AdapterResponse,
+			next: () => void,
+		) => {
+			if (!matchesBasePath(req, this.basePath)) {
+				next();
+				return;
+			}
+
+			if (
+				adapterType === "fastify" &&
+				!this.options.disableTrustedOriginsCors &&
+				isNotFunctionBased &&
+				handleFastifyTrustedOriginsCors(req, res, {
+					trustedOrigins,
+				})
+			) {
+				return;
+			}
+
+			const nodeReq = getNodeRequest(req);
+			const nodeRes = getNodeResponse(res);
+
+			if (this.options.middleware) {
+				return this.options.middleware(req, res, () =>
+					handler(nodeReq, nodeRes),
+				);
+			}
+			return handler(nodeReq, nodeRes);
+		};
+
 		this.adapter.httpAdapter.use(
 			(
 				// biome-ignore lint/suspicious/noExplicitAny: adapter request type should not leak into the public declaration
@@ -200,33 +244,7 @@ export class AuthModule
 				// biome-ignore lint/suspicious/noExplicitAny: adapter response type should not leak into the public declaration
 				res: any,
 				next: () => void,
-			) => {
-				if (!matchesBasePath(req, this.basePath)) {
-					next();
-					return;
-				}
-
-				if (
-					adapterType === "fastify" &&
-					!this.options.disableTrustedOriginsCors &&
-					isNotFunctionBased &&
-					handleFastifyTrustedOriginsCors(req, res, {
-						trustedOrigins,
-					})
-				) {
-					return;
-				}
-
-				const nodeReq = getNodeRequest(req);
-				const nodeRes = getNodeResponse(res);
-
-				if (this.options.middleware) {
-					return this.options.middleware(req, res, () =>
-						handler(nodeReq, nodeRes),
-					);
-				}
-				return handler(nodeReq, nodeRes);
-			},
+			) => authHandler(req as AdapterRequest, res as AdapterResponse, next),
 		);
 		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
 	}
