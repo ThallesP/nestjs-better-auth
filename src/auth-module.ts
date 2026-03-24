@@ -14,7 +14,10 @@ import {
 } from "@nestjs/core";
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/api";
-import type { Request as ExpressRequest, Response as ExpressResponse } from "express";
+import type {
+	Request as ExpressRequest,
+	Response as ExpressResponse,
+} from "express";
 import {
 	type ASYNC_OPTIONS_TYPE,
 	type AuthModuleOptions,
