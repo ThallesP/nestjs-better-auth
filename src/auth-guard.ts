@@ -35,6 +35,28 @@ export type UserSession = BaseUserSession & {
 	};
 };
 
+/**
+ * Infers the full session type from a Better Auth instance, including
+ * all fields added by plugins (e.g., `username` from the username plugin).
+ *
+ * Use this instead of `UserSession` when you need type-safe access to
+ * plugin-specific fields in your `@Session()` decorator.
+ *
+ * @example
+ * ```ts
+ * const auth = betterAuth({ plugins: [username(), admin()] });
+ * type Auth = typeof auth;
+ *
+ * @Get('me')
+ * getMe(@Session() session: InferSession<Auth>) {
+ *   session.user.username; // ✅ typed correctly
+ * }
+ * ```
+ */
+export type InferSession<T> = T extends { $Infer: { Session: infer S } }
+	? S
+	: UserSession;
+
 const AuthErrorType = {
 	UNAUTHORIZED: "UNAUTHORIZED",
 	FORBIDDEN: "FORBIDDEN",
