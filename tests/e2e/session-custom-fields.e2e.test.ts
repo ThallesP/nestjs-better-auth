@@ -161,17 +161,11 @@ describe("session custom fields e2e", () => {
 			.set("Authorization", `Bearer ${signUp.token}`)
 			.expect(200);
 
-		expect(response.body.decorator.username).toBe(
-			response.body.api.username,
-		);
+		expect(response.body.decorator.username).toBe(response.body.api.username);
 		expect(response.body.decorator.displayUsername).toBe(
 			response.body.api.displayUsername,
 		);
-		expect(response.body.decorator.username).toBe(
-			testUsername.toLowerCase(),
-		);
-		expect(response.body.decorator.displayUsername).toBe(
-			testDisplayUsername,
-		);
+		expect(response.body.decorator.username).toBe(testUsername.toLowerCase());
+		expect(response.body.decorator.displayUsername).toBe(testDisplayUsername);
 	});
 });
