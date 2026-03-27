@@ -19,7 +19,7 @@ import {
 	createTestHttpAdapter,
 	initTestApplication,
 } from "../shared/http-adapter.ts";
-import type { InferSession } from "../../src/auth-guard.ts";
+import type { UserSession } from "../../src/auth-guard.ts";
 import { fromNodeHeaders } from "better-auth/node";
 
 function createAuthWithUsername() {
@@ -40,7 +40,7 @@ class SessionTestController {
 	) {}
 
 	@Get("session")
-	getSession(@Session() session: InferSession<AuthWithUsername>) {
+	getSession(@Session() session: UserSession<AuthWithUsername>) {
 		return {
 			user: session?.user,
 			session: session?.session,
@@ -49,7 +49,7 @@ class SessionTestController {
 
 	@Get("compare")
 	async compareSessionSources(
-		@Session() session: InferSession<AuthWithUsername>,
+		@Session() session: UserSession<AuthWithUsername>,
 		@Req() req: { headers: Record<string, string | string[] | undefined> },
 	) {
 		const apiSession = await this.authService.api.getSession({
