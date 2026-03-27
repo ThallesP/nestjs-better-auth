@@ -49,6 +49,7 @@
       "optionalPeers": [
         "@nestjs/graphql",
         "@nestjs/websockets",
+        "express",
         "graphql",
         "qs",
       ],
