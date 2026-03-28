@@ -26,14 +26,33 @@ export type BaseUserSession = NonNullable<
 	Awaited<ReturnType<ReturnType<typeof getSession>>>
 >;
 
-export type UserSession = BaseUserSession & {
-	user: BaseUserSession["user"] & {
-		role?: string | string[];
-	};
-	session: BaseUserSession["session"] & {
-		activeOrganizationId?: string;
-	};
-};
+/**
+ * Type representing a user session with plugin-aware type inference.
+ *
+ * Pass your auth instance type to get full type safety for plugin fields:
+ *
+ * @example
+ * ```ts
+ * const auth = betterAuth({ plugins: [username(), admin()] });
+ *
+ * @Get('me')
+ * getMe(@Session() session: UserSession<typeof auth>) {
+ *   session.user.username; // ✅ typed correctly
+ * }
+ * ```
+ */
+export type UserSession<T = unknown> = T extends {
+	$Infer: { Session: infer S };
+}
+	? S
+	: BaseUserSession & {
+			user: BaseUserSession["user"] & {
+				role?: string | string[];
+			};
+			session: BaseUserSession["session"] & {
+				activeOrganizationId?: string;
+			};
+		};
 
 const AuthErrorType = {
 	UNAUTHORIZED: "UNAUTHORIZED",
