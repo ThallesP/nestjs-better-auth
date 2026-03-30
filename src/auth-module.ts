@@ -207,13 +207,42 @@ export class AuthModule
 		}
 
 		// Better Auth captures databaseHooks at context creation time, so we
-		// must rebuild the internal adapter to include decorator-registered hooks
+		// must rebuild the internal adapter to include decorator-registered hooks.
+		// Each entry must be { source, hooks } as required by better-auth v1.5.6+.
 		const context = await this.options.auth.$context;
-		const existingHooks = this.options.auth.options.databaseHooks;
+		const options = this.options.auth.options;
+
+		// biome-ignore lint/suspicious/noExplicitAny: plugin type is internal to Better Auth
+		const pluginHooks = (options.plugins || ([] as any[]))
+			.filter(
+				(p: { id?: string; init?: unknown }) => typeof p.init === "function",
+			)
+			.map((p: { id: string; init: () => unknown }) => {
+				try {
+					const result = p.init() as
+						| { options?: { databaseHooks?: unknown } }
+						| undefined;
+					const raw = result?.options?.databaseHooks;
+					return raw ? { source: `plugin:${p.id}`, hooks: raw } : undefined;
+				} catch {
+					return undefined;
+				}
+			})
+			.filter(Boolean);
+
+		const wrappedUserHooks = options.databaseHooks
+			? { source: "user", hooks: options.databaseHooks }
+			: undefined;
+
+		const wrappedDecoratorHooks =
+			Object.keys(decoratorHooks).length > 0
+				? { source: "nestjs-decorator", hooks: decoratorHooks }
+				: undefined;
+
 		context.internalAdapter = createInternalAdapter(context.adapter, {
 			options: context.options,
 			logger: context.logger,
-			hooks: [existingHooks, decoratorHooks].filter(
+			hooks: [...pluginHooks, wrappedUserHooks, wrappedDecoratorHooks].filter(
 				(h): h is NonNullable<typeof h> => h !== undefined,
 			),
 			generateId: context.generateId,
