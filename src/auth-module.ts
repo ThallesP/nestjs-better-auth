@@ -14,6 +14,7 @@ import {
 } from "@nestjs/core";
 import { toNodeHandler } from "better-auth/node";
 import { createAuthMiddleware } from "better-auth/api";
+import { createInternalAdapter } from "better-auth/db";
 import type {
 	Request as ExpressRequest,
 	Response as ExpressResponse,
@@ -35,7 +36,14 @@ import {
 	matchesBasePath,
 	resolveBodyParserOptions,
 } from "./middlewares.ts";
-import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
+import {
+	AFTER_HOOK_KEY,
+	BEFORE_HOOK_KEY,
+	DATABASE_HOOK_KEY,
+	DB_HOOK_METHOD_KEY,
+	HOOK_KEY,
+} from "./symbols.ts";
+import type { DatabaseHookMethodMetadata } from "./decorators.ts";
 import { AuthGuard } from "./auth-guard.ts";
 import { APP_GUARD } from "@nestjs/core";
 import { normalizePath } from "@nestjs/common/utils/shared.utils.js";
@@ -107,7 +115,12 @@ export class AuthModule
 		});
 	}
 
-	onModuleInit(): void {
+	async onModuleInit(): Promise<void> {
+		this.setupApiHooks();
+		await this.setupDatabaseHooks();
+	}
+
+	private setupApiHooks(): void {
 		const providers = this.discoveryService
 			.getProviders()
 			.filter(
@@ -131,9 +144,80 @@ export class AuthModule
 
 			for (const method of methods) {
 				const providerMethod = providerPrototype[method];
-				this.setupHooks(providerMethod, provider.instance);
+				this.setupHookMethod(providerMethod, provider.instance);
 			}
 		}
+	}
+
+	private async setupDatabaseHooks(): Promise<void> {
+		const providers = this.discoveryService
+			.getProviders()
+			.filter(
+				({ metatype }) =>
+					metatype && Reflect.getMetadata(DATABASE_HOOK_KEY, metatype),
+			);
+
+		if (providers.length === 0) return;
+
+		// biome-ignore lint/suspicious/noExplicitAny: Better Auth databaseHooks is a deeply nested dynamic structure
+		const decoratorHooks: Record<string, any> = {};
+
+		for (const provider of providers) {
+			const providerPrototype = Object.getPrototypeOf(provider.instance);
+			const methods = this.metadataScanner.getAllMethodNames(providerPrototype);
+
+			for (const methodName of methods) {
+				const providerMethod = providerPrototype[methodName];
+				const metadata: DatabaseHookMethodMetadata | undefined =
+					Reflect.getMetadata(DB_HOOK_METHOD_KEY, providerMethod);
+
+				if (!metadata) continue;
+
+				const { model, operation, timing } = metadata;
+
+				if (!decoratorHooks[model]) decoratorHooks[model] = {};
+				if (!decoratorHooks[model][operation])
+					decoratorHooks[model][operation] = {};
+
+				const existingHook = decoratorHooks[model][operation][timing] as
+					| ((...args: unknown[]) => Promise<unknown>)
+					| undefined;
+
+				decoratorHooks[model][operation][timing] = async (
+					data: unknown,
+					ctx: unknown,
+				) => {
+					if (existingHook) {
+						const result = await existingHook(data, ctx);
+						if (result === false) return false;
+						if (
+							result &&
+							typeof result === "object" &&
+							"data" in (result as Record<string, unknown>)
+						) {
+							return providerMethod.apply(provider.instance, [
+								(result as { data: unknown }).data,
+								ctx,
+							]);
+						}
+					}
+					return providerMethod.apply(provider.instance, [data, ctx]);
+				};
+			}
+		}
+
+		// Better Auth captures databaseHooks at context creation time, so we
+		// must rebuild the internal adapter to include decorator-registered hooks
+		const context = await this.options.auth.$context;
+		const existingHooks = this.options.auth.options.databaseHooks;
+		context.internalAdapter = createInternalAdapter(context.adapter, {
+			options: context.options,
+			logger: context.logger,
+			hooks: [existingHooks, decoratorHooks].filter(
+				(h): h is NonNullable<typeof h> => h !== undefined,
+			),
+			generateId: context.generateId,
+		});
 	}
 
 	configure(consumer: MiddlewareConsumer): void {
@@ -252,7 +336,7 @@ export class AuthModule
 		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
 	}
 
-	private setupHooks(
+	private setupHookMethod(
 		providerMethod: (...args: unknown[]) => unknown,
 		providerClass: { new (...args: unknown[]): unknown },
 	) {
