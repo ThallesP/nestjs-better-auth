@@ -460,6 +460,78 @@ import { auth } from "./auth";
 export class AppModule {}
 ```
 
+### Database Hook Decorators
+
+Database hooks intercept Better Auth's database operations (`create`, `update`, `delete`) on core models (`user`, `session`, `account`, `verification`). Unlike API hooks which target HTTP endpoints, database hooks run at the ORM level.
+
+> [!NOTE]
+> Unlike `@Hook()`, you do **not** need to set `databaseHooks: {}` in your `betterAuth(...)` config. The library auto-initializes it when `@DatabaseHook()` providers are detected.
+
+#### Usage
+
+```ts title="hooks/user-database.hook.ts"
+import { Injectable } from "@nestjs/common";
+import {
+  DatabaseHook,
+  BeforeCreate,
+  AfterCreate,
+} from "@thallesp/nestjs-better-auth";
+import { WelcomeService } from "./welcome.service";
+
+@DatabaseHook()
+@Injectable()
+export class UserDatabaseHook {
+  constructor(private readonly welcomeService: WelcomeService) {}
+
+  @BeforeCreate("user")
+  async setDefaultRole(user: Record<string, unknown>) {
+    // Modify data before persistence
+    return {
+      data: { ...user, role: "member" },
+    };
+  }
+
+  @AfterCreate("user")
+  async sendWelcomeEmail(user: Record<string, unknown>) {
+    // Side effect after persistence
+    await this.welcomeService.send(user.email as string);
+  }
+}
+```
+
+Register in your module:
+
+```ts title="app.module.ts"
+import { Module } from "@nestjs/common";
+import { AuthModule } from "@thallesp/nestjs-better-auth";
+import { UserDatabaseHook } from "./hooks/user-database.hook";
+import { WelcomeService } from "./welcome.service";
+import { auth } from "./auth";
+
+@Module({
+  imports: [AuthModule.forRoot({ auth })],
+  providers: [UserDatabaseHook, WelcomeService],
+})
+export class AppModule {}
+```
+
+#### Method Decorators
+
+| Decorator | Description | Return |
+|-----------|-------------|--------|
+| `@BeforeCreate(model)` | Runs before a record is created | `{ data }` to modify, `false` to abort, or `void` |
+| `@AfterCreate(model)` | Runs after a record is created | `void` (side effects only) |
+| `@BeforeUpdate(model)` | Runs before a record is updated | `{ data }` to modify, `false` to abort, or `void` |
+| `@AfterUpdate(model)` | Runs after a record is updated | `void` (side effects only) |
+| `@BeforeDelete(model)` | Runs before a record is deleted | `false` to abort, or `void` |
+| `@AfterDelete(model)` | Runs after a record is deleted | `void` (side effects only) |
+
+The `model` parameter accepts: `"user"`, `"session"`, `"account"`, or `"verification"`.
+
+Each method receives two arguments:
+1. `data` — the entity being created/updated/deleted
+2. `ctx` — the Better Auth endpoint context (can be `null` when called outside an HTTP request)
+
 ## AuthService
 
 The `AuthService` is automatically provided by the `AuthModule` and can be injected into your controllers to access the Better Auth instance and its API endpoints.
