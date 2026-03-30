@@ -248,7 +248,7 @@ This library provides two permission decorators for fine-grained access control:
 | Decorator | Checks | Use Case |
 |-----------|--------|----------|
 | `@UserHasPermission()` | User-level permissions | System-level permissions ([admin plugin access control](https://www.better-auth.com/docs/plugins/admin/access-control)) |
-| `@MemberHasPermission()` | Organization member permissions | Organization-level permissions ([organization plugin access control](https://www.better-auth.com/docs/plugins/organization/access-control)) |
+| `@MemberHasPermission()` | Organization member permissions | Organization-level permissions ([organization plugin access control](https://www.better-auth.com/docs/plugins/organization#access-control)) |
 
 #### @UserHasPermission() - System-Level Permissions
 
@@ -328,7 +328,7 @@ export class ProjectController {
 
 #### @MemberHasPermission() - Organization-Level Permissions
 
-Use `@MemberHasPermission()` for organization-scoped permission-based access control. This checks organization member permissions using Better Auth's [organization plugin access control](https://www.better-auth.com/docs/plugins/organization/access-control). Requires an active organization (`activeOrganizationId` in session).
+Use `@MemberHasPermission()` for organization-scoped permission-based access control. This checks organization member permissions using Better Auth's [organization plugin access control](https://www.better-auth.com/docs/plugins/organization#access-control). Requires an active organization (`activeOrganizationId` in session).
 
 **Prerequisites:**
 - Configure access control in your Better Auth organization plugin
