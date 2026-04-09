@@ -1,7 +1,14 @@
 import { SetMetadata, createParamDecorator } from "@nestjs/common";
 import type { CustomDecorator, ExecutionContext } from "@nestjs/common";
 import type { createAuthMiddleware } from "better-auth/api";
-import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
+import {
+	AFTER_DATABASE_HOOK_KEY,
+	AFTER_HOOK_KEY,
+	BEFORE_DATABASE_HOOK_KEY,
+	BEFORE_HOOK_KEY,
+	DATABASE_HOOK_KEY,
+	HOOK_KEY,
+} from "./symbols.ts";
 import { getRequestFromContext } from "./utils.ts";
 
 /**
@@ -185,3 +192,66 @@ export const AfterHook = (path?: `/${string}`): CustomDecorator<symbol> =>
  * Must be applied to classes that use BeforeHook or AfterHook decorators.
  */
 export const Hook = (): ClassDecorator => SetMetadata(HOOK_KEY, true);
+
+/**
+ * The models that support database hooks in Better Auth.
+ */
+export type DatabaseHookModel = "user" | "session" | "account" | "verification";
+
+/**
+ * The operations that support database hooks in Better Auth.
+ */
+export type DatabaseHookOperation = "create" | "update" | "delete";
+
+/**
+ * Class decorator that marks a provider as containing database hook methods.
+ * Must be applied to classes that use BeforeDatabaseHook or AfterDatabaseHook decorators.
+ */
+export const DatabaseHook = (): ClassDecorator =>
+	SetMetadata(DATABASE_HOOK_KEY, true);
+
+/**
+ * Registers a method to be executed before a database operation on a specific model.
+ * @param model - The model to hook into (user, session, account, verification)
+ * @param operation - The operation to hook into (create, update, delete)
+ *
+ * @example
+ * ```ts
+ * @DatabaseHook()
+ * @Injectable()
+ * class MyHooks {
+ *   @BeforeDatabaseHook("user", "create")
+ *   async beforeUserCreate(user: User, ctx: GenericEndpointContext | null) {
+ *     return { data: { ...user, name: user.name.toUpperCase() } };
+ *   }
+ * }
+ * ```
+ */
+export const BeforeDatabaseHook = (
+	model: DatabaseHookModel,
+	operation: DatabaseHookOperation,
+): CustomDecorator<symbol> =>
+	SetMetadata(BEFORE_DATABASE_HOOK_KEY, { model, operation });
+
+/**
+ * Registers a method to be executed after a database operation on a specific model.
+ * @param model - The model to hook into (user, session, account, verification)
+ * @param operation - The operation to hook into (create, update, delete)
+ *
+ * @example
+ * ```ts
+ * @DatabaseHook()
+ * @Injectable()
+ * class MyHooks {
+ *   @AfterDatabaseHook("user", "create")
+ *   async afterUserCreate(user: User, ctx: GenericEndpointContext | null) {
+ *     await this.emailService.sendWelcomeEmail(user.email);
+ *   }
+ * }
+ * ```
+ */
+export const AfterDatabaseHook = (
+	model: DatabaseHookModel,
+	operation: DatabaseHookOperation,
+): CustomDecorator<symbol> =>
+	SetMetadata(AFTER_DATABASE_HOOK_KEY, { model, operation });
