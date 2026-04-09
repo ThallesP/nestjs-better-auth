@@ -205,53 +205,61 @@ export type DatabaseHookOperation = "create" | "update" | "delete";
 
 /**
  * Class decorator that marks a provider as containing database hook methods.
- * Must be applied to classes that use BeforeDatabaseHook or AfterDatabaseHook decorators.
+ * Must be applied to classes that use database hook method decorators.
  */
 export const DatabaseHook = (): ClassDecorator =>
 	SetMetadata(DATABASE_HOOK_KEY, true);
 
 /**
- * Registers a method to be executed before a database operation on a specific model.
+ * Registers a method to be executed before a record is created.
  * @param model - The model to hook into (user, session, account, verification)
- * @param operation - The operation to hook into (create, update, delete)
- *
- * @example
- * ```ts
- * @DatabaseHook()
- * @Injectable()
- * class MyHooks {
- *   @BeforeDatabaseHook("user", "create")
- *   async beforeUserCreate(user: User, ctx: GenericEndpointContext | null) {
- *     return { data: { ...user, name: user.name.toUpperCase() } };
- *   }
- * }
- * ```
  */
-export const BeforeDatabaseHook = (
+export const BeforeCreate = (
 	model: DatabaseHookModel,
-	operation: DatabaseHookOperation,
 ): CustomDecorator<symbol> =>
-	SetMetadata(BEFORE_DATABASE_HOOK_KEY, { model, operation });
+	SetMetadata(BEFORE_DATABASE_HOOK_KEY, { model, operation: "create" });
 
 /**
- * Registers a method to be executed after a database operation on a specific model.
+ * Registers a method to be executed after a record is created.
  * @param model - The model to hook into (user, session, account, verification)
- * @param operation - The operation to hook into (create, update, delete)
- *
- * @example
- * ```ts
- * @DatabaseHook()
- * @Injectable()
- * class MyHooks {
- *   @AfterDatabaseHook("user", "create")
- *   async afterUserCreate(user: User, ctx: GenericEndpointContext | null) {
- *     await this.emailService.sendWelcomeEmail(user.email);
- *   }
- * }
- * ```
  */
-export const AfterDatabaseHook = (
+export const AfterCreate = (
 	model: DatabaseHookModel,
-	operation: DatabaseHookOperation,
 ): CustomDecorator<symbol> =>
-	SetMetadata(AFTER_DATABASE_HOOK_KEY, { model, operation });
+	SetMetadata(AFTER_DATABASE_HOOK_KEY, { model, operation: "create" });
+
+/**
+ * Registers a method to be executed before a record is updated.
+ * @param model - The model to hook into (user, session, account, verification)
+ */
+export const BeforeUpdate = (
+	model: DatabaseHookModel,
+): CustomDecorator<symbol> =>
+	SetMetadata(BEFORE_DATABASE_HOOK_KEY, { model, operation: "update" });
+
+/**
+ * Registers a method to be executed after a record is updated.
+ * @param model - The model to hook into (user, session, account, verification)
+ */
+export const AfterUpdate = (
+	model: DatabaseHookModel,
+): CustomDecorator<symbol> =>
+	SetMetadata(AFTER_DATABASE_HOOK_KEY, { model, operation: "update" });
+
+/**
+ * Registers a method to be executed before a record is deleted.
+ * @param model - The model to hook into (user, session, account, verification)
+ */
+export const BeforeDelete = (
+	model: DatabaseHookModel,
+): CustomDecorator<symbol> =>
+	SetMetadata(BEFORE_DATABASE_HOOK_KEY, { model, operation: "delete" });
+
+/**
+ * Registers a method to be executed after a record is deleted.
+ * @param model - The model to hook into (user, session, account, verification)
+ */
+export const AfterDelete = (
+	model: DatabaseHookModel,
+): CustomDecorator<symbol> =>
+	SetMetadata(AFTER_DATABASE_HOOK_KEY, { model, operation: "delete" });
