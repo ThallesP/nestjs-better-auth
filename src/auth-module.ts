@@ -35,7 +35,15 @@ import {
 	matchesBasePath,
 	resolveBodyParserOptions,
 } from "./middlewares.ts";
-import { AFTER_HOOK_KEY, BEFORE_HOOK_KEY, HOOK_KEY } from "./symbols.ts";
+import {
+	AFTER_DATABASE_HOOK_KEY,
+	AFTER_HOOK_KEY,
+	BEFORE_DATABASE_HOOK_KEY,
+	BEFORE_HOOK_KEY,
+	DATABASE_HOOK_KEY,
+	HOOK_KEY,
+} from "./symbols.ts";
+import type { DatabaseHookModel, DatabaseHookOperation } from "./decorators.ts";
 import { AuthGuard } from "./auth-guard.ts";
 import { APP_GUARD } from "@nestjs/core";
 import { normalizePath } from "@nestjs/common/utils/shared.utils.js";
@@ -44,6 +52,11 @@ import { mapToExcludeRoute } from "@nestjs/core/middleware/utils.js";
 const HOOKS = [
 	{ metadataKey: BEFORE_HOOK_KEY, hookType: "before" as const },
 	{ metadataKey: AFTER_HOOK_KEY, hookType: "after" as const },
+];
+
+const DATABASE_HOOKS = [
+	{ metadataKey: BEFORE_DATABASE_HOOK_KEY, hookType: "before" as const },
+	{ metadataKey: AFTER_DATABASE_HOOK_KEY, hookType: "after" as const },
 ];
 
 type AdapterRequest = ExpressRequest & {
@@ -108,13 +121,13 @@ export class AuthModule
 	}
 
 	onModuleInit(): void {
-		const providers = this.discoveryService
+		const hookProviders = this.discoveryService
 			.getProviders()
 			.filter(
 				({ metatype }) => metatype && Reflect.getMetadata(HOOK_KEY, metatype),
 			);
 
-		const hasHookProviders = providers.length > 0;
+		const hasHookProviders = hookProviders.length > 0;
 		const hooksConfigured =
 			typeof this.options.auth?.options?.hooks === "object";
 
@@ -123,15 +136,45 @@ export class AuthModule
 				"Detected @Hook providers but Better Auth 'hooks' are not configured. Add 'hooks: {}' to your betterAuth(...) options.",
 			);
 
-		if (!hooksConfigured) return;
+		if (hooksConfigured) {
+			for (const provider of hookProviders) {
+				const providerPrototype = Object.getPrototypeOf(provider.instance);
+				const methods =
+					this.metadataScanner.getAllMethodNames(providerPrototype);
 
-		for (const provider of providers) {
+				for (const method of methods) {
+					const providerMethod = providerPrototype[method];
+					this.setupHooks(providerMethod, provider.instance);
+				}
+			}
+		}
+
+		// Database hooks discovery
+		const databaseHookProviders = this.discoveryService
+			.getProviders()
+			.filter(
+				({ metatype }) =>
+					metatype && Reflect.getMetadata(DATABASE_HOOK_KEY, metatype),
+			);
+
+		const hasDatabaseHookProviders = databaseHookProviders.length > 0;
+		const databaseHooksConfigured =
+			typeof this.options.auth?.options?.databaseHooks === "object";
+
+		if (hasDatabaseHookProviders && !databaseHooksConfigured)
+			throw new Error(
+				"Detected @DatabaseHook providers but Better Auth 'databaseHooks' is not configured. Add an empty 'databaseHooks: {}' object to your betterAuth(...) options.",
+			);
+
+		if (!hasDatabaseHookProviders) return;
+
+		for (const provider of databaseHookProviders) {
 			const providerPrototype = Object.getPrototypeOf(provider.instance);
 			const methods = this.metadataScanner.getAllMethodNames(providerPrototype);
 
 			for (const method of methods) {
 				const providerMethod = providerPrototype[method];
-				this.setupHooks(providerMethod, provider.instance);
+				this.setupDatabaseHooks(providerMethod, provider.instance);
 			}
 		}
 	}
@@ -276,6 +319,38 @@ export class AuthModule
 					await providerMethod.apply(providerClass, [ctx]);
 				},
 			);
+		}
+	}
+
+	private setupDatabaseHooks(
+		providerMethod: (...args: unknown[]) => unknown,
+		providerClass: { new (...args: unknown[]): unknown },
+	) {
+		if (!this.options.auth.options.databaseHooks) return;
+
+		for (const { metadataKey, hookType } of DATABASE_HOOKS) {
+			if (!Reflect.hasMetadata(metadataKey, providerMethod)) continue;
+
+			const { model, operation } = Reflect.getMetadata(
+				metadataKey,
+				providerMethod,
+			) as { model: DatabaseHookModel; operation: DatabaseHookOperation };
+
+			const databaseHooks = this.options.auth.options.databaseHooks;
+
+			// Ensure the nested structure exists: databaseHooks[model][operation]
+			databaseHooks[model] ??= {};
+			databaseHooks[model][operation] ??= {};
+
+			const originalHook = databaseHooks[model][operation][hookType];
+			databaseHooks[model][operation][hookType] = async (
+				...args: unknown[]
+			) => {
+				if (originalHook) {
+					await originalHook(...args);
+				}
+				return providerMethod.apply(providerClass, args);
+			};
 		}
 	}
 

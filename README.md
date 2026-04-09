@@ -460,6 +460,89 @@ import { auth } from "./auth";
 export class AppModule {}
 ```
 
+### Database Hook Decorators
+
+> [!IMPORTANT]
+> To use `@DatabaseHook`, `@BeforeCreate`, `@AfterCreate`, `@BeforeUpdate`, `@AfterUpdate`, `@BeforeDelete`, `@AfterDelete`, set `databaseHooks: {}` (empty object) in your `betterAuth(...)` config.
+
+Database hooks let you hook into the lifecycle of core database operations (create, update, delete) for Better Auth models (`user`, `session`, `account`, `verification`).
+
+Minimal Better Auth setup with database hooks enabled:
+
+```ts title="auth.ts"
+import { betterAuth } from "better-auth";
+
+export const auth = betterAuth({
+  // other better-auth options...
+  databaseHooks: {}, // empty object is the minimum required
+});
+```
+
+Create database hooks that integrate with NestJS's dependency injection:
+
+```ts title="hooks/user-create.hook.ts"
+import { Injectable } from "@nestjs/common";
+import {
+  DatabaseHook,
+  BeforeCreate,
+  AfterCreate,
+} from "@thallesp/nestjs-better-auth";
+import { EmailService } from "./email.service";
+
+@DatabaseHook()
+@Injectable()
+export class UserCreateHook {
+  constructor(private readonly emailService: EmailService) {}
+
+  @BeforeCreate("user")
+  async beforeUserCreate(user) {
+    return {
+      data: {
+        ...user,
+        firstName: user.name.split(" ")[0],
+        lastName: user.name.split(" ")[1],
+      },
+    };
+  }
+
+  @AfterCreate("user")
+  async afterUserCreate(user) {
+    await this.emailService.sendWelcomeEmail(user.email);
+  }
+}
+```
+
+Register your database hooks in a module:
+
+```ts title="app.module.ts"
+import { Module } from "@nestjs/common";
+import { AuthModule } from "@thallesp/nestjs-better-auth";
+import { UserCreateHook } from "./hooks/user-create.hook";
+import { EmailService } from "./email.service";
+import { auth } from "./auth";
+
+@Module({
+  imports: [AuthModule.forRoot({ auth })],
+  providers: [UserCreateHook, EmailService],
+})
+export class AppModule {}
+```
+
+Available method decorators:
+
+| Decorator | Description |
+|-----------|-------------|
+| `@BeforeCreate(model)` | Runs before a record is created |
+| `@AfterCreate(model)` | Runs after a record is created |
+| `@BeforeUpdate(model)` | Runs before a record is updated |
+| `@AfterUpdate(model)` | Runs after a record is updated |
+| `@BeforeDelete(model)` | Runs before a record is deleted |
+| `@AfterDelete(model)` | Runs after a record is deleted |
+
+Where `model` is one of: `"user"`, `"session"`, `"account"`, `"verification"`.
+
+`before` hooks can return `false` to abort the operation, or `{ data: ... }` to modify the data before it's written. `after` hooks are for side effects only.
+
 ## AuthService
 
 The `AuthService` is automatically provided by the `AuthModule` and can be injected into your controllers to access the Better Auth instance and its API endpoints.
