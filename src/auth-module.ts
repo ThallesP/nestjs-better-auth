@@ -157,22 +157,9 @@ export class AuthModule
 					metatype && Reflect.getMetadata(DATABASE_HOOK_KEY, metatype),
 			);
 
-		const hasDatabaseHookProviders = databaseHookProviders.length > 0;
-		const databaseHooksConfigured =
-			typeof this.options.auth?.options?.databaseHooks === "object";
+		if (databaseHookProviders.length === 0) return;
 
-		/**
-		 * TODO: This check might not be necessary for database hooks since we build the
-		 * databaseHooks object ourselves (unlike regular hooks which need createAuthMiddleware).
-		 * Try commenting this block out to see if it still works without requiring
-		 * `databaseHooks: {}` in the betterAuth config.
-		 */
-		if (hasDatabaseHookProviders && !databaseHooksConfigured)
-			throw new Error(
-				"Detected @DatabaseHook providers but Better Auth 'databaseHooks' are not configured. Add 'databaseHooks: {}' to your betterAuth(...) options.",
-			);
-
-		if (!hasDatabaseHookProviders) return;
+		this.options.auth.options.databaseHooks ??= {};
 
 		for (const provider of databaseHookProviders) {
 			const providerPrototype = Object.getPrototypeOf(provider.instance);
@@ -332,8 +319,6 @@ export class AuthModule
 		providerMethod: (...args: unknown[]) => unknown,
 		providerClass: { new (...args: unknown[]): unknown },
 	) {
-		if (!this.options.auth.options.databaseHooks) return;
-
 		for (const { metadataKey, hookType } of DATABASE_HOOKS) {
 			if (!Reflect.hasMetadata(metadataKey, providerMethod)) continue;
 
