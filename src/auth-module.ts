@@ -163,7 +163,7 @@ export class AuthModule
 
 		if (hasDatabaseHookProviders && !databaseHooksConfigured)
 			throw new Error(
-				"Detected @DatabaseHook providers but Better Auth 'databaseHooks' is not configured. Add 'databaseHooks: {}' to your betterAuth(...) options (it can be empty).",
+				"Detected @DatabaseHook providers but Better Auth 'databaseHooks' is not configured. Add an empty 'databaseHooks: {}' object to your betterAuth(...) options.",
 			);
 
 		if (!hasDatabaseHookProviders) return;
