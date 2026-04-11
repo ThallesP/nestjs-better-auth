@@ -665,7 +665,7 @@ The available options are:
 
 | Option                      | Default | Description                                                                                                                                                              |
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `disableTrustedOriginsCors` | `false` | When set to `true`, disables the library's automatic CORS handling for the origins specified in `trustedOrigins`. On Fastify, leave this as `false` in the common case, even when your app already registers `@fastify/cors`: this library applies Better Auth route CORS separately from your app-level Fastify CORS. |
+| `disableTrustedOriginsCors` | `false` | When set to `true`, disables the automatic CORS configuration for the origins specified in `trustedOrigins`. On Fastify, use this only if you want to fully manage Better Auth route CORS yourself. |
 | `bodyParser`                | Re-adds JSON and URL-encoded body parsers | Configure the body parsers re-added by the module after Nest body parsing is disabled. `json` and `urlencoded` accept the parser options object plus `enabled?: boolean`, and `rawBody?: boolean` enables `req.rawBody`. |
 | `disableBodyParser`         | `false` | Deprecated. Use `bodyParser.json.enabled` and `bodyParser.urlencoded.enabled` instead. When set to `true`, disables both parsers unless you explicitly re-enable one in `bodyParser`. |
 | `enableRawBodyParser`       | `false` | Deprecated. Use `bodyParser.rawBody` instead. When set to `true`, enables raw body parsing and attaches the raw buffer to `req.rawBody`. |
@@ -706,11 +706,10 @@ On Fastify, Better Auth routes are served through middleware internally. Because
 
 - app-level `@fastify/cors` does not fully apply to Better Auth routes on its own
 - this module applies Better Auth route CORS from `trustedOrigins`
-- this module does not register Fastify CORS for you; it only applies Better Auth route CORS from `trustedOrigins`
-- because of that, you usually do not need `disableTrustedOriginsCors: true` just because your app already enables Fastify CORS
-- set `disableTrustedOriginsCors: true` only if you want to disable library-managed Better Auth route CORS entirely
 
 This Fastify fallback only supports array-based `trustedOrigins`. Function-based `trustedOrigins` remain unsupported unless you set `disableTrustedOriginsCors: true` and manage Better Auth route CORS manually.
+
+Set `disableTrustedOriginsCors: true` only if you want to fully manage Better Auth route CORS yourself.
 
 ### Using Custom Middleware
 
