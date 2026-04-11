@@ -56,11 +56,6 @@ type ResponseLike = ServerResponse<IncomingMessage> & {
 	raw?: ServerResponse<IncomingMessage>;
 };
 
-type NodeRequestLike = IncomingMessage & {
-	method?: string;
-	headers: IncomingMessage["headers"];
-};
-
 function getExpressBodyParser(): ExpressBodyParserModule {
 	return require("express") as ExpressBodyParserModule;
 }

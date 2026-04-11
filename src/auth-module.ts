@@ -27,9 +27,7 @@ import {
 } from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
 import { configureFastifyBodyParser } from "./fastify-body-parser.ts";
-import {
-	handleFastifyTrustedOriginsCors,
-} from "./fastify-trusted-origins-cors.ts";
+import { handleFastifyTrustedOriginsCors } from "./fastify-trusted-origins-cors.ts";
 import {
 	SkipBodyParsingMiddleware,
 	getNodeRequest,

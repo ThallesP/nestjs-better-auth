@@ -10,10 +10,6 @@ import {
 	DatabaseHook,
 	BeforeCreate,
 	AfterCreate,
-	BeforeUpdate,
-	AfterUpdate,
-	BeforeDelete,
-	AfterDelete,
 } from "../../src/index.ts";
 import { createTestNestApplication } from "../shared/test-utils.ts";
 
