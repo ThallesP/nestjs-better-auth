@@ -5,7 +5,23 @@ export type BodyParserTypeMatcher =
 	| string[]
 	| ((req: IncomingMessage) => unknown);
 
-export type BodyParserLimit = number | string;
+/** Base-2 byte multipliers for string {@link BodyParserLimit} values (e.g. `"2mb"`). */
+export const BYTE_UNITS = {
+	b: 1,
+	kb: 1 << 10,
+	mb: 1 << 20,
+	gb: 1 << 30,
+} as const;
+
+export type BodyParserByteUnit = keyof typeof BYTE_UNITS;
+
+/**
+ * Body size limit: a positive byte count (`number`) or a string such as `"300kb"`, `"2mb"`, `"0.5gb"`, or plain digits for bytes (e.g. `"1048576"`).
+ */
+export type BodyParserLimit =
+	| number
+	| `${number}`
+	| `${number}${BodyParserByteUnit}`;
 
 export interface CommonBodyParserOptions {
 	inflate?: boolean;
