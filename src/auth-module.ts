@@ -27,11 +27,11 @@ import {
 } from "./auth-module-definition.ts";
 import { AuthService } from "./auth-service.ts";
 import { configureFastifyBodyParser } from "./fastify-body-parser.ts";
+import { handleFastifyTrustedOriginsCors } from "./fastify-trusted-origins-cors.ts";
 import {
 	SkipBodyParsingMiddleware,
 	getNodeRequest,
 	getNodeResponse,
-	handleFastifyTrustedOriginsCors,
 	matchesBasePath,
 	resolveBodyParserOptions,
 } from "./middlewares.ts";
@@ -188,26 +188,7 @@ export class AuthModule
 		const isNotFunctionBased = trustedOrigins && Array.isArray(trustedOrigins);
 
 		if (!this.options.disableTrustedOriginsCors && isNotFunctionBased) {
-			if (adapterType === "fastify") {
-				const fastifyInstance = this.adapter.httpAdapter.getInstance<{
-					hasRequestDecorator?: (name: string) => boolean;
-				}>();
-				const hasFastifyCorsRegistered =
-					fastifyInstance?.hasRequestDecorator?.("corsPreflightEnabled") ??
-					false;
-
-				if (hasFastifyCorsRegistered) {
-					this.logger.warn(
-						"Detected an existing @fastify/cors registration. Skipping automatic Fastify CORS registration for Better Auth trustedOrigins to avoid duplicate plugin registration. Better Auth routes will still apply CORS from trustedOrigins. Set disableTrustedOriginsCors: true if you want to fully manage Better Auth CORS yourself.",
-					);
-				} else {
-					this.adapter.httpAdapter.enableCors({
-						origin: trustedOrigins,
-						methods: ["GET", "POST", "PUT", "DELETE"],
-						credentials: true,
-					});
-				}
-			} else {
+			if (adapterType !== "fastify") {
 				this.adapter.httpAdapter.enableCors({
 					origin: trustedOrigins,
 					methods: ["GET", "POST", "PUT", "DELETE"],

@@ -1,4 +1,3 @@
-import { Logger } from "@nestjs/common";
 import cors from "@fastify/cors";
 import request from "supertest";
 import { vi } from "vitest";
@@ -61,12 +60,8 @@ describe("cors e2e", () => {
 	});
 
 	fastifyOnly(
-		"should warn and skip duplicate Fastify CORS registration when @fastify/cors is already registered",
+		"should coexist with app-level Fastify CORS when @fastify/cors is already registered",
 		async () => {
-			const warnSpy = vi
-				.spyOn(Logger.prototype, "warn")
-				.mockImplementation(() => undefined);
-
 			testSetup = await createTestApp(undefined, false, {
 				authOptions: {
 					trustedOrigins: [TRUSTED_ORIGIN],
@@ -78,14 +73,6 @@ describe("cors e2e", () => {
 					});
 				},
 			});
-
-			const warningCalls = warnSpy.mock.calls.filter(([message]) =>
-				String(message).includes(
-					"Detected an existing @fastify/cors registration.",
-				),
-			);
-
-			expect(warningCalls).toHaveLength(1);
 
 			const httpServer = testSetup.app.getHttpServer();
 			const optionsResponse = await request(httpServer)

@@ -706,7 +706,6 @@ On Fastify, Better Auth routes are served through middleware internally. Because
 
 - app-level `@fastify/cors` does not fully apply to Better Auth routes on its own
 - this module applies Better Auth route CORS from `trustedOrigins`
-- if `@fastify/cors` is already registered, this module skips duplicate Fastify CORS registration and logs a warning once
 
 This Fastify fallback only supports array-based `trustedOrigins`. Function-based `trustedOrigins` remain unsupported unless you set `disableTrustedOriginsCors: true` and manage Better Auth route CORS manually.
 
