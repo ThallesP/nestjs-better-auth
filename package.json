@@ -68,6 +68,9 @@
 		"unplugin-swc": "^1.5.7",
 		"vitest": "^3.2.4"
 	},
+	"dependencies": {
+		"express": "^5.2.1"
+	},
 	"peerDependencies": {
 		"@nestjs/common": "^11.1.6",
 		"@nestjs/core": "^11.1.6",
