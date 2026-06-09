@@ -7,6 +7,7 @@
 	"engines": {
 		"node": ">=22.22.1"
 	},
+	"packageManager": "bun@1.2.22",
 	"keywords": [
 		"nestjs",
 		"better-auth",
