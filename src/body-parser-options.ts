@@ -16,12 +16,20 @@ export const BYTE_UNITS = {
 export type BodyParserByteUnit = keyof typeof BYTE_UNITS;
 
 /**
- * Body size limit: a positive byte count (`number`) or a string such as `"300kb"`, `"2mb"`, `"0.5gb"`, or plain digits for bytes (e.g. `"1048576"`).
+ * Known body size limit strings: values such as `"300kb"`, `"2mb"`, `"0.5gb"`, or plain digits for bytes (e.g. `"1048576"`).
  */
-export type BodyParserLimit =
-	| number
+export type KnownBodyParserLimit =
 	| `${number}`
 	| `${number}${BodyParserByteUnit}`;
+
+/**
+ * Body size limit: a byte count (`number`) or a string limit.
+ *
+ * String remains accepted for compatibility with Express/body-parser and
+ * environment-driven configuration, while known literal forms still show up as
+ * TypeScript guidance.
+ */
+export type BodyParserLimit = number | KnownBodyParserLimit | (string & {});
 
 export interface CommonBodyParserOptions {
 	inflate?: boolean;
