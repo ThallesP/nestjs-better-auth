@@ -1,8 +1,10 @@
 import type { HttpAdapterHost } from "@nestjs/core";
 import { createRequire } from "node:module";
-import type {
-	BodyParserLimit,
-	BodyParserTypeMatcher,
+import {
+	BYTE_UNITS,
+	type BodyParserByteUnit,
+	type BodyParserLimit,
+	type BodyParserTypeMatcher,
 } from "./body-parser-options.ts";
 import type {
 	ResolvedBodyParserOptions,
@@ -49,25 +51,30 @@ function resolveFastifyBodyLimit(limit: BodyParserLimit | undefined) {
 		return limit;
 	}
 
-	const normalizedLimit = limit.trim().toLowerCase();
-	const match = /^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)?$/.exec(normalizedLimit);
+	const SIZE_REGEX = new RegExp(
+		`^(\\d+(?:\\.\\d+)?)\\s*(${Object.keys(BYTE_UNITS).join("|")})?$`,
+		"i",
+	);
+
+	const match = SIZE_REGEX.exec(limit.trim().toLowerCase());
 
 	if (!match) {
 		throw new Error(
-			`Unsupported Fastify body parser limit '${limit}'. Use a number of bytes or a string like '2mb'.`,
+			`Unsupported Fastify body parser limit '${limit}'. Use a number of bytes or a string like '2mb', '0.5gb', etc.`,
 		);
 	}
 
-	const units = {
-		b: 1,
-		kb: 1024,
-		mb: 1024 * 1024,
-		gb: 1024 * 1024 * 1024,
-	};
 	const value = Number.parseFloat(match[1]);
-	const unit = (match[2] ?? "b") as keyof typeof units;
+	const unit = (match[2] ?? "b") as BodyParserByteUnit;
+	const bytes = Math.floor(value * BYTE_UNITS[unit]);
 
-	return Math.floor(value * units[unit]);
+	if (!Number.isSafeInteger(bytes)) {
+		throw new RangeError(
+			`Resolved body limit exceeds safe integer range. Received: '${limit}'`,
+		);
+	}
+
+	return bytes;
 }
 
 function parseFastifyJsonBody(
