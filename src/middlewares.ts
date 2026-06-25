@@ -1,12 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createRequire } from "node:module";
+import bodyParser from "body-parser";
 import type { AuthModuleOptions } from "./auth-module-definition.ts";
 import type {
 	JsonBodyParserOptions,
 	UrlencodedBodyParserOptions,
 } from "./body-parser-options.ts";
-
-const require = createRequire(import.meta.url);
 
 type MiddlewareNext = (error?: unknown) => void;
 type BodyParserHandler = (
@@ -56,8 +54,8 @@ type ResponseLike = ServerResponse<IncomingMessage> & {
 	raw?: ServerResponse<IncomingMessage>;
 };
 
-function getExpressBodyParser(): ExpressBodyParserModule {
-	return require("express") as ExpressBodyParserModule;
+function getBodyParser(): ExpressBodyParserModule {
+	return bodyParser as ExpressBodyParserModule;
 }
 
 export type ResolvedJsonBodyParserOptions = JsonBodyParserOptions & {
@@ -138,7 +136,7 @@ export function SkipBodyParsingMiddleware(
 ) {
 	const { basePath = "/api/auth", bodyParser = resolveBodyParserOptions() } =
 		options;
-	const express = getExpressBodyParser();
+	const parser = getBodyParser();
 
 	const {
 		enabled: jsonEnabled,
@@ -152,10 +150,10 @@ export function SkipBodyParsingMiddleware(
 		? { ...jsonParserOptions, verify: rawBodyParser }
 		: jsonParserOptions;
 	const jsonParser = jsonEnabled
-		? express.json(expressJsonParserOptions as never)
+		? parser.json(expressJsonParserOptions as never)
 		: null;
 	const urlencodedParser = urlencodedEnabled
-		? express.urlencoded(urlencodedParserOptions as never)
+		? parser.urlencoded(urlencodedParserOptions as never)
 		: null;
 
 	return (req: RequestLike, res: ResponseLike, next: MiddlewareNext): void => {
