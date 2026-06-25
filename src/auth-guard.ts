@@ -82,20 +82,14 @@ const AuthContextErrorMap: Record<
 	Record<keyof typeof AuthErrorType, (args?: unknown) => Promise<Error>>
 > = {
 	http: {
-		UNAUTHORIZED: async (args) =>
-			new UnauthorizedException(
-				args ?? {
-					code: "UNAUTHORIZED",
-					message: "Unauthorized",
-				},
-			),
-		FORBIDDEN: async (args) =>
-			new ForbiddenException(
-				args ?? {
-					code: "FORBIDDEN",
-					message: "Insufficient permissions",
-				},
-			),
+		UNAUTHORIZED: async (args) => {
+			if (args) return new UnauthorizedException(args);
+			return new UnauthorizedException();
+		},
+		FORBIDDEN: async (args) => {
+			if (args) return new ForbiddenException(args);
+			return new ForbiddenException("Insufficient permissions");
+		},
 	},
 	graphql: {
 		UNAUTHORIZED: async (args) => {
