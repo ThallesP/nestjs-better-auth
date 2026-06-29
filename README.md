@@ -179,7 +179,8 @@ This library provides two role decorators for different use cases:
 | Decorator | Checks | Use Case |
 |-----------|--------|----------|
 | `@Roles()` | `user.role` only | System-level roles ([admin plugin](https://www.better-auth.com/docs/plugins/admin)) |
-| `@OrgRoles()` | Organization member role only | Organization-level roles ([organization plugin](https://www.better-auth.com/docs/plugins/organization)) |
+| `@RequireActiveOrg()` | Active organization only | Routes that only need `activeOrganizationId` for scoping |
+| `@OrgRoles()` | Active organization + organization member role | Organization-level roles ([organization plugin](https://www.better-auth.com/docs/plugins/organization)) |
 
 > [!IMPORTANT]
 > These decorators are intentionally **separate** to prevent privilege escalation. The `@Roles()` decorator only checks `user.role` and does **not** check organization member roles. This ensures an organization admin cannot bypass system-level admin protection.
@@ -211,9 +212,33 @@ export class AdminController {
 }
 ```
 
+#### @RequireActiveOrg() - Active Organization Only
+
+Use `@RequireActiveOrg()` when a route or controller only needs an active organization context. This requires authentication and `session.activeOrganizationId`, but does not require any specific organization role.
+
+```ts title="projects.controller.ts"
+import { Controller, Get } from "@nestjs/common";
+import {
+  RequireActiveOrg,
+  Session,
+  UserSession,
+} from "@thallesp/nestjs-better-auth";
+
+@RequireActiveOrg()
+@Controller("projects")
+export class ProjectsController {
+  @Get()
+  async listProjects(@Session() session: UserSession) {
+    return { orgId: session.session.activeOrganizationId };
+  }
+}
+```
+
+Use this when the controller only needs an active organization ID for scoping data, but authorization is handled elsewhere or organization roles are dynamic.
+
 #### @OrgRoles() - Organization-Level Roles
 
-Use `@OrgRoles()` for organization-scoped protection. This checks only the organization member role and requires an active organization (`activeOrganizationId` in session).
+Use `@OrgRoles()` for organization-scoped protection when you want to require an active organization and one of the specified organization member roles.
 
 ```ts title="org.controller.ts"
 import { Controller, Get } from "@nestjs/common";

@@ -169,6 +169,17 @@ export class AuthGuard implements CanActivate {
 			request.headers || request?.handshake?.headers || [],
 		);
 
+		const requireActiveOrg = this.reflector.getAllAndOverride<boolean>(
+			"REQUIRE_ACTIVE_ORG",
+			[context.getHandler(), context.getClass()],
+		);
+
+		if (requireActiveOrg && !session.session?.activeOrganizationId) {
+			throw await AuthContextErrorMap[ctxType].FORBIDDEN({
+				message: "Active organization is required",
+			});
+		}
+
 		// Check @Roles() - user.role only (admin plugin)
 		const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
 			context.getHandler(),
