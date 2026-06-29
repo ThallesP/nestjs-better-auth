@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Request } from "@nestjs/common";
 import {
 	OptionalAuth,
 	AllowAnonymous,
+	RequireActiveOrg,
 	Roles,
 	OrgRoles,
 } from "../../src/decorators.ts";
@@ -47,6 +48,12 @@ export class TestController {
 	@Get("admin-moderator-protected")
 	adminModeratorProtected(@Request() req: UserSession) {
 		return { user: req.user };
+	}
+
+	@RequireActiveOrg()
+	@Get("active-org-protected")
+	activeOrgProtected(@Request() req: UserSession) {
+		return { user: req.user, session: req.session };
 	}
 
 	@OrgRoles(["owner"])
@@ -99,5 +106,14 @@ export class TestController {
 			hasBody: body !== undefined,
 			body: body ?? null,
 		};
+	}
+}
+
+@RequireActiveOrg()
+@Controller("active-org-controller")
+export class ActiveOrgController {
+	@Get("projects")
+	projects(@Request() req: UserSession) {
+		return { user: req.user, session: req.session };
 	}
 }
