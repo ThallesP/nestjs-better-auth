@@ -4,6 +4,10 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+  id-token: write # required for npm trusted publishing (OIDC)
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -12,6 +16,18 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          # Do NOT set registry-url here: it writes an .npmrc auth line
+          # (_authToken=${NODE_AUTH_TOKEN}) that makes npm use token auth
+          # instead of OIDC, and the publish fails with ENEEDAUTH/E404.
+
+      # Trusted publishing requires npm >= 11.5.1; don't rely on the
+      # version bundled with the runner's Node.
+      - name: Update npm
+        run: npm install -g npm@latest && npm --version
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -28,7 +44,8 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      # bun publish doesn't support trusted publishing yet
+      # (oven-sh/bun#22423), so the publish step uses npm. No token:
+      # npm exchanges the workflow's OIDC token with the registry.
       - name: Release to NPM
-        run: bun publish --access public
-        env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
