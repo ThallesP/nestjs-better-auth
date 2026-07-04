@@ -3,12 +3,6 @@ name: Release NPM Package
 on:
   release:
     types: [published]
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Dry run (npm publish --dry-run, nothing is published)"
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -53,10 +47,5 @@ jobs:
       # bun publish doesn't support trusted publishing yet
       # (oven-sh/bun#22423), so the publish step uses npm. No token:
       # npm exchanges the workflow's OIDC token with the registry.
-      - name: Release to NPM (dry run)
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
-        run: npm publish --dry-run --access public
-
       - name: Release to NPM
-        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
         run: npm publish --provenance --access public
