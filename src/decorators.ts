@@ -1,4 +1,8 @@
-import { SetMetadata, createParamDecorator } from "@nestjs/common";
+import {
+	SetMetadata,
+	applyDecorators,
+	createParamDecorator,
+} from "@nestjs/common";
 import type { CustomDecorator, ExecutionContext } from "@nestjs/common";
 import type { createAuthMiddleware } from "better-auth/api";
 import {
@@ -25,6 +29,13 @@ export const AllowAnonymous = (): CustomDecorator<string> =>
  */
 export const OptionalAuth = (): CustomDecorator<string> =>
 	SetMetadata("OPTIONAL", true);
+
+/**
+ * Requires an authenticated session with an active organization selected.
+ * Does not check for any specific organization role.
+ */
+export const RequireActiveOrg = (): CustomDecorator<string> =>
+	SetMetadata("REQUIRE_ACTIVE_ORG", true);
 
 /**
  * Specifies the user-level roles required to access a route or controller.
@@ -56,7 +67,7 @@ export const Roles = (roles: string[]): CustomDecorator =>
  * ```
  */
 export const OrgRoles = (roles: string[]): CustomDecorator =>
-	SetMetadata("ORG_ROLES", roles);
+	applyDecorators(RequireActiveOrg(), SetMetadata("ORG_ROLES", roles));
 
 /**
  * Type for permission checks - maps resource names to arrays of actions

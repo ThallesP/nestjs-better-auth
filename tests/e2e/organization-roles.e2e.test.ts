@@ -7,7 +7,10 @@ import { bearer } from "better-auth/plugins/bearer";
 import { organization } from "better-auth/plugins/organization";
 import { admin } from "better-auth/plugins/admin";
 import { AuthModule } from "../../src/index.ts";
-import { TestController } from "../shared/test-controller.ts";
+import {
+	ActiveOrgController,
+	TestController,
+} from "../shared/test-controller.ts";
 import { createTestNestApplication } from "../shared/test-utils.ts";
 
 /**
@@ -37,7 +40,7 @@ async function createTestAppWithOrganization() {
 
 	@Module({
 		imports: [AuthModule.forRoot({ auth })],
-		controllers: [TestController],
+		controllers: [TestController, ActiveOrgController],
 	})
 	class AppModule {}
 
@@ -424,6 +427,190 @@ describe("organization roles e2e", () => {
 			expect(response.body).toMatchObject({
 				user: expect.objectContaining({
 					id: memberSignUp.user.id,
+				}),
+			});
+		});
+	});
+
+	describe("@RequireActiveOrg()", () => {
+		it("should forbid access when session has no active organization", async () => {
+			const signUp = await testSetup.auth.api.signUpEmail({
+				body: {
+					name: faker.person.fullName(),
+					email: faker.internet.email(),
+					password: faker.internet.password({ length: 10 }),
+				},
+			});
+
+			await request(testSetup.app.getHttpServer())
+				.get("/test/active-org-protected")
+				.set("Authorization", `Bearer ${signUp.token}`)
+				.expect(403)
+				.expect((res) => {
+					expect(res.body?.message).toContain(
+						"Active organization is required",
+					);
+				});
+		});
+
+		it("should allow access when session has an active organization", async () => {
+			const signUp = await testSetup.auth.api.signUpEmail({
+				body: {
+					name: faker.person.fullName(),
+					email: faker.internet.email(),
+					password: faker.internet.password({ length: 10 }),
+				},
+			});
+
+			// biome-ignore lint/suspicious/noExplicitAny: API types vary by plugin
+			const authApi = testSetup.auth.api as any;
+
+			const org = await authApi.createOrganization({
+				body: {
+					name: "Active Org Route",
+					slug: `active-org-route-${Date.now()}`,
+				},
+				headers: {
+					Authorization: `Bearer ${signUp.token}`,
+				},
+			});
+
+			await authApi.setActiveOrganization({
+				body: {
+					organizationId: org.id,
+				},
+				headers: {
+					Authorization: `Bearer ${signUp.token}`,
+				},
+			});
+
+			const response = await request(testSetup.app.getHttpServer())
+				.get("/test/active-org-protected")
+				.set("Authorization", `Bearer ${signUp.token}`)
+				.expect(200);
+
+			expect(response.body).toMatchObject({
+				user: expect.objectContaining({
+					id: signUp.user.id,
+				}),
+				session: expect.objectContaining({
+					session: expect.objectContaining({
+						activeOrganizationId: org.id,
+					}),
+				}),
+			});
+		});
+
+		it("should not require any specific org role", async () => {
+			const ownerSignUp = await testSetup.auth.api.signUpEmail({
+				body: {
+					name: faker.person.fullName(),
+					email: faker.internet.email(),
+					password: faker.internet.password({ length: 10 }),
+				},
+			});
+
+			const memberSignUp = await testSetup.auth.api.signUpEmail({
+				body: {
+					name: faker.person.fullName(),
+					email: faker.internet.email(),
+					password: faker.internet.password({ length: 10 }),
+				},
+			});
+
+			// biome-ignore lint/suspicious/noExplicitAny: API types vary by plugin
+			const authApi = testSetup.auth.api as any;
+
+			const org = await authApi.createOrganization({
+				body: {
+					name: "Active Org Member Access",
+					slug: `active-org-member-${Date.now()}`,
+				},
+				headers: {
+					Authorization: `Bearer ${ownerSignUp.token}`,
+				},
+			});
+
+			await authApi.addMember({
+				body: {
+					userId: memberSignUp.user.id,
+					organizationId: org.id,
+					role: "member",
+				},
+			});
+
+			await authApi.setActiveOrganization({
+				body: {
+					organizationId: org.id,
+				},
+				headers: {
+					Authorization: `Bearer ${memberSignUp.token}`,
+				},
+			});
+
+			const response = await request(testSetup.app.getHttpServer())
+				.get("/test/active-org-protected")
+				.set("Authorization", `Bearer ${memberSignUp.token}`)
+				.expect(200);
+
+			expect(response.body).toMatchObject({
+				user: expect.objectContaining({
+					id: memberSignUp.user.id,
+				}),
+				session: expect.objectContaining({
+					session: expect.objectContaining({
+						activeOrganizationId: org.id,
+					}),
+				}),
+			});
+		});
+
+		it("should support controller-level protection", async () => {
+			const signUp = await testSetup.auth.api.signUpEmail({
+				body: {
+					name: faker.person.fullName(),
+					email: faker.internet.email(),
+					password: faker.internet.password({ length: 10 }),
+				},
+			});
+
+			// biome-ignore lint/suspicious/noExplicitAny: API types vary by plugin
+			const authApi = testSetup.auth.api as any;
+
+			await request(testSetup.app.getHttpServer())
+				.get("/active-org-controller/projects")
+				.set("Authorization", `Bearer ${signUp.token}`)
+				.expect(403);
+
+			const org = await authApi.createOrganization({
+				body: {
+					name: "Controller Active Org",
+					slug: `controller-active-org-${Date.now()}`,
+				},
+				headers: {
+					Authorization: `Bearer ${signUp.token}`,
+				},
+			});
+
+			await authApi.setActiveOrganization({
+				body: {
+					organizationId: org.id,
+				},
+				headers: {
+					Authorization: `Bearer ${signUp.token}`,
+				},
+			});
+
+			const response = await request(testSetup.app.getHttpServer())
+				.get("/active-org-controller/projects")
+				.set("Authorization", `Bearer ${signUp.token}`)
+				.expect(200);
+
+			expect(response.body).toMatchObject({
+				session: expect.objectContaining({
+					session: expect.objectContaining({
+						activeOrganizationId: org.id,
+					}),
 				}),
 			});
 		});
