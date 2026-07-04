@@ -1,0 +1,16 @@
+name: OIDC debug
+on:
+  push:
+    branches: [ci/oidc-debug]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
