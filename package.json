@@ -60,6 +60,7 @@
 		"@swc/cli": "^0.7.8",
 		"@swc/core": "^1.13.20",
 		"@tsconfig/node22": "^22.0.2",
+		"@types/body-parser": "^1.19.6",
 		"@types/bun": "latest",
 		"@types/express": "^5.0.3",
 		"@types/supertest": "^6.0.3",
@@ -102,5 +103,8 @@
 		"qs": {
 			"optional": true
 		}
+	},
+	"dependencies": {
+		"body-parser": "^2.2.2"
 	}
 }
