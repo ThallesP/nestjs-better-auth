@@ -216,6 +216,11 @@ export class AuthModule
 			);
 		}
 
+		if (adapterType === "hono") {
+			this.configureHono();
+			return;
+		}
+
 		if (adapterType !== "fastify") {
 			consumer
 				.apply(
@@ -273,6 +278,25 @@ export class AuthModule
 				next: () => void,
 			) => authHandler(req as AdapterRequest, res as AdapterResponse, next),
 		);
+		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
+	}
+
+	/**
+	 * Hono exposes the Fetch API `Request`, so Better Auth's handler is mounted
+	 * directly on the Hono instance instead of through Node middleware.
+	 */
+	private configureHono() {
+		if (this.options.middleware) {
+			this.logger.warn(
+				"`middleware` is not supported with the Hono adapter and will be ignored.",
+			);
+		}
+
+		this.adapter.httpAdapter
+			.getInstance()
+			.all(`${this.basePath}/*`, (ctx: { req: { raw: Request } }) =>
+				this.options.auth.handler(ctx.req.raw),
+			);
 		this.logger.log(`AuthModule initialized BetterAuth on '${this.basePath}'`);
 	}
 

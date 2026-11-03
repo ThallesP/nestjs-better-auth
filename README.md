@@ -736,6 +736,15 @@ This Fastify fallback only supports array-based `trustedOrigins`. Function-based
 
 Set `disableTrustedOriginsCors: true` only if you want to fully manage Better Auth route CORS yourself.
 
+### Hono
+
+Nest HTTP adapters for [Hono](https://hono.dev) (where `getType()` returns `"hono"` and `getInstance()` returns the Hono app) are supported. Better Auth routes are mounted directly on the Hono app and receive the Fetch API `Request`, so:
+
+- `bodyParser` and `middleware` options do not apply (setting `middleware` logs a warning)
+- `basePath` is matched as an absolute path on the Hono app; the Nest global prefix is not applied, same as on Express and Fastify
+- `trustedOrigins` CORS is applied through the adapter's `enableCors`; function-based `trustedOrigins` require `disableTrustedOriginsCors: true`
+- if your adapter parses request bodies, exclude the Better Auth `basePath` from it so Better Auth can read the original body
+
 ### Using Custom Middleware
 
 You can provide a custom middleware function that wraps the Better Auth handler. This is particularly useful when integrating with libraries like MikroORM that require request context:
