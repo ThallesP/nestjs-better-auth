@@ -752,3 +752,7 @@ AuthModule.forRoot({
 ```
 
 The middleware receives standard Express middleware parameters `(req, res, next)` where `next` is a function that invokes the Better Auth handler.
+
+## Community
+
+Questions, ideas or just want to talk? Come say hi on [Discord](https://discord.gg/pF5wfWZMSH).
