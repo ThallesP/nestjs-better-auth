@@ -16,7 +16,7 @@ import {
 	type AuthModuleOptions,
 	MODULE_OPTIONS_TOKEN,
 } from "./auth-module-definition.ts";
-import { getRequestFromContext } from "./utils.ts";
+import { getGqlExecutionContext, getRequestFromContext } from "./utils.ts";
 
 /**
  * Type representing a valid user session after authentication
@@ -53,6 +53,8 @@ export type UserSession<T = unknown> = T extends {
 				activeOrganizationId?: string;
 			};
 		};
+
+const SESSION_PROMISE = Symbol("betterAuthSessionPromise");
 
 const AuthErrorType = {
 	UNAUTHORIZED: "UNAUTHORIZED",
@@ -139,11 +141,7 @@ export class AuthGuard implements CanActivate {
 	 */
 	async canActivate(context: ExecutionContext): Promise<boolean> {
 		const request = await getRequestFromContext(context);
-		const session: UserSession | null = await this.options.auth.api.getSession({
-			headers: fromNodeHeaders(
-				request.headers || request?.handshake?.headers || [],
-			),
-		});
+		const session = await this.getSessionOnce(context, request);
 
 		request.session = session;
 		request.user = session?.user ?? null; // useful for observability tools like Sentry
@@ -245,6 +243,36 @@ export class AuthGuard implements CanActivate {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Fetches the session, once per GraphQL request.
+	 * With `fieldResolverEnhancers: ["guards"]` this guard runs before every resolved field,
+	 * so the lookup is shared by all fields of the same request instead of repeated per field.
+	 * Not for subscriptions: their context lives as long as the subscription,
+	 * and a session must not outlive that check.
+	 */
+	private async getSessionOnce(
+		context: ExecutionContext,
+		// biome-ignore lint/suspicious/noExplicitAny: request shape differs per transport
+		request: any,
+	): Promise<UserSession | null> {
+		const fetchSession = () =>
+			this.options.auth.api.getSession({
+				headers: fromNodeHeaders(
+					request.headers || request?.handshake?.headers || [],
+				),
+			}) as Promise<UserSession | null>;
+
+		if (context.getType<ContextType | "graphql">() !== "graphql") {
+			return fetchSession();
+		}
+
+		const info = (await getGqlExecutionContext()).create(context).getInfo();
+		if (info?.operation?.operation === "subscription") return fetchSession();
+
+		request[SESSION_PROMISE] ??= fetchSession();
+		return request[SESSION_PROMISE];
 	}
 
 	/**

@@ -66,4 +66,33 @@ describe("graphql auth e2e", () => {
 			userId: signUp.user.id,
 		});
 	});
+
+	it("should fetch the session once per request when guards run on field resolvers", async () => {
+		const signUp = await testSetup.auth.api.signUpEmail({
+			body: {
+				name: faker.person.fullName(),
+				email: faker.internet.email(),
+				password: faker.internet.password({ length: 10 }),
+			},
+		});
+		const getSessionSpy = vi.spyOn(testSetup.auth.api, "getSession");
+
+		try {
+			const response = await request(testSetup.app.getHttpServer())
+				.post("/graphql")
+				.set("Content-Type", "application/json")
+				.set("Authorization", `Bearer ${signUp.token}`)
+				.send({ query: "{ sessionItems { id userId } }" })
+				.expect(200);
+
+			expect(response.body?.data?.sessionItems).toEqual([
+				{ id: "1", userId: signUp.user.id },
+				{ id: "2", userId: signUp.user.id },
+				{ id: "3", userId: signUp.user.id },
+			]);
+			expect(getSessionSpy).toHaveBeenCalledTimes(1);
+		} finally {
+			getSessionSpy.mockRestore();
+		}
+	});
 });
