@@ -3,6 +3,7 @@ import {
 	Query,
 	ObjectType,
 	Field,
+	Mutation,
 	ResolveField,
 } from "@nestjs/graphql";
 import { AllowAnonymous, OptionalAuth, Roles } from "../../src/decorators.ts";
@@ -72,6 +73,11 @@ export class SessionItemResolver {
 	@Query(() => [SessionItem])
 	sessionItems(): SessionItem[] {
 		return [{ id: "1" }, { id: "2" }, { id: "3" }];
+	}
+
+	@Mutation(() => String, { nullable: true })
+	sessionUserId(@Session() session: UserSession) {
+		return session?.user?.id;
 	}
 
 	@ResolveField(() => String, { nullable: true })

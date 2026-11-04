@@ -95,4 +95,63 @@ describe("graphql auth e2e", () => {
 			getSessionSpy.mockRestore();
 		}
 	});
+
+	it("should not share the session between requests", async () => {
+		const signUpUser = () =>
+			testSetup.auth.api.signUpEmail({
+				body: {
+					name: faker.person.fullName(),
+					email: faker.internet.email(),
+					password: faker.internet.password({ length: 10 }),
+				},
+			});
+		const [first, second] = [await signUpUser(), await signUpUser()];
+		const getSessionSpy = vi.spyOn(testSetup.auth.api, "getSession");
+
+		try {
+			for (const signUp of [first, second]) {
+				const response = await request(testSetup.app.getHttpServer())
+					.post("/graphql")
+					.set("Content-Type", "application/json")
+					.set("Authorization", `Bearer ${signUp.token}`)
+					.send({ query: "{ sessionItems { id userId } }" })
+					.expect(200);
+
+				for (const item of response.body?.data?.sessionItems ?? []) {
+					expect(item.userId).toBe(signUp.user.id);
+				}
+			}
+			expect(getSessionSpy).toHaveBeenCalledTimes(2);
+		} finally {
+			getSessionSpy.mockRestore();
+		}
+	});
+
+	it("should fetch the session for every mutation field", async () => {
+		const signUp = await testSetup.auth.api.signUpEmail({
+			body: {
+				name: faker.person.fullName(),
+				email: faker.internet.email(),
+				password: faker.internet.password({ length: 10 }),
+			},
+		});
+		const getSessionSpy = vi.spyOn(testSetup.auth.api, "getSession");
+
+		try {
+			const response = await request(testSetup.app.getHttpServer())
+				.post("/graphql")
+				.set("Content-Type", "application/json")
+				.set("Authorization", `Bearer ${signUp.token}`)
+				.send({ query: "mutation { a: sessionUserId b: sessionUserId }" })
+				.expect(200);
+
+			expect(response.body?.data).toEqual({
+				a: signUp.user.id,
+				b: signUp.user.id,
+			});
+			expect(getSessionSpy).toHaveBeenCalledTimes(2);
+		} finally {
+			getSessionSpy.mockRestore();
+		}
+	});
 });

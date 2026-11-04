@@ -54,7 +54,14 @@ export type UserSession<T = unknown> = T extends {
 			};
 		};
 
-const SESSION_PROMISE = Symbol("betterAuthSessionPromise");
+/**
+ * Session lookups shared by the fields of one GraphQL query, keyed by its context object.
+ * The context is created per operation, while `req` can outlive it (e.g. a graphql-ws socket).
+ */
+const sessionPromisesByGqlContext = new WeakMap<
+	object,
+	Promise<UserSession | null>
+>();
 
 const AuthErrorType = {
 	UNAUTHORIZED: "UNAUTHORIZED",
@@ -246,11 +253,11 @@ export class AuthGuard implements CanActivate {
 	}
 
 	/**
-	 * Fetches the session, once per GraphQL request.
+	 * Fetches the session, once per GraphQL query operation.
 	 * With `fieldResolverEnhancers: ["guards"]` this guard runs before every resolved field,
-	 * so the lookup is shared by all fields of the same request instead of repeated per field.
-	 * Not for subscriptions: their context lives as long as the subscription,
-	 * and a session must not outlive that check.
+	 * so the lookup is shared by all fields of the same query instead of repeated per field.
+	 * Mutations and subscriptions fetch on every check: a mutation field can sign out
+	 * before the next one runs, and a subscription's context lives as long as the subscription.
 	 */
 	private async getSessionOnce(
 		context: ExecutionContext,
@@ -268,11 +275,22 @@ export class AuthGuard implements CanActivate {
 			return fetchSession();
 		}
 
-		const info = (await getGqlExecutionContext()).create(context).getInfo();
-		if (info?.operation?.operation === "subscription") return fetchSession();
+		const gqlContext = (await getGqlExecutionContext()).create(context);
+		const contextValue = gqlContext.getContext();
+		if (
+			gqlContext.getInfo()?.operation?.operation !== "query" ||
+			typeof contextValue !== "object" ||
+			contextValue === null
+		) {
+			return fetchSession();
+		}
 
-		request[SESSION_PROMISE] ??= fetchSession();
-		return request[SESSION_PROMISE];
+		let sessionPromise = sessionPromisesByGqlContext.get(contextValue);
+		if (!sessionPromise) {
+			sessionPromise = fetchSession();
+			sessionPromisesByGqlContext.set(contextValue, sessionPromise);
+		}
+		return sessionPromise;
 	}
 
 	/**
