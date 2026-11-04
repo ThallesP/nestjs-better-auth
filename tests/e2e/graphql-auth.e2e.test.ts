@@ -117,7 +117,9 @@ describe("graphql auth e2e", () => {
 					.send({ query: "{ sessionItems { id userId } }" })
 					.expect(200);
 
-				for (const item of response.body?.data?.sessionItems ?? []) {
+				const items = response.body?.data?.sessionItems;
+				expect(items).toHaveLength(3);
+				for (const item of items) {
 					expect(item.userId).toBe(signUp.user.id);
 				}
 			}

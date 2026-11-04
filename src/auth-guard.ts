@@ -54,15 +54,6 @@ export type UserSession<T = unknown> = T extends {
 			};
 		};
 
-/**
- * Session lookups shared by the fields of one GraphQL query, keyed by its context object.
- * The context is created per operation, while `req` can outlive it (e.g. a graphql-ws socket).
- */
-const sessionPromisesByGqlContext = new WeakMap<
-	object,
-	Promise<UserSession | null>
->();
-
 const AuthErrorType = {
 	UNAUTHORIZED: "UNAUTHORIZED",
 	FORBIDDEN: "FORBIDDEN",
@@ -132,6 +123,16 @@ const AuthContextErrorMap: Record<
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
+	/**
+	 * Session lookups shared by the fields of one GraphQL query, keyed by its context object.
+	 * The context is created per operation, while `req` can outlive it (e.g. a graphql-ws socket).
+	 * Kept per guard, so each `AuthModule` registration checks against its own auth instance.
+	 */
+	private readonly sessionPromisesByGqlContext = new WeakMap<
+		object,
+		Promise<UserSession | null>
+	>();
+
 	constructor(
 		@Inject(Reflector)
 		private readonly reflector: Reflector,
@@ -285,10 +286,10 @@ export class AuthGuard implements CanActivate {
 			return fetchSession();
 		}
 
-		let sessionPromise = sessionPromisesByGqlContext.get(contextValue);
+		let sessionPromise = this.sessionPromisesByGqlContext.get(contextValue);
 		if (!sessionPromise) {
 			sessionPromise = fetchSession();
-			sessionPromisesByGqlContext.set(contextValue, sessionPromise);
+			this.sessionPromisesByGqlContext.set(contextValue, sessionPromise);
 		}
 		return sessionPromise;
 	}
