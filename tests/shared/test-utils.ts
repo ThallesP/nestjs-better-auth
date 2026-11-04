@@ -8,7 +8,7 @@ import { bearer } from "better-auth/plugins/bearer";
 import { AuthModule } from "../../src/index.ts";
 import { betterAuth } from "better-auth";
 import { TestController } from "./test-controller.ts";
-import { TestResolver } from "./test-resolver.ts";
+import { SessionItemResolver, TestResolver } from "./test-resolver.ts";
 import { TestGateway } from "./test-gateway.ts";
 import { admin } from "better-auth/plugins/admin";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
@@ -58,6 +58,7 @@ export function createTestAppModule(
 				driver: ApolloDriver,
 				autoSchemaFile: true,
 				path: "/graphql",
+				fieldResolverEnhancers: ["guards"],
 				context: ({ req, res }: { req: Request; res: Response }) => ({
 					req,
 					res,
@@ -65,7 +66,7 @@ export function createTestAppModule(
 			}),
 		],
 		controllers: [TestController],
-		providers: [TestResolver, TestGateway],
+		providers: [TestResolver, SessionItemResolver, TestGateway],
 	})
 	class AppModule {}
 

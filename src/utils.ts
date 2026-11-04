@@ -3,7 +3,11 @@ import type { GqlExecutionContext as GqlExecutionContextType } from "@nestjs/gra
 
 let GqlExecutionContext: typeof GqlExecutionContextType | undefined;
 
-async function getGqlExecutionContext(): Promise<
+/**
+ * Lazy-loads GqlExecutionContext to keep @nestjs/graphql an optional dependency
+ * @returns The GqlExecutionContext class
+ */
+export async function getGqlExecutionContext(): Promise<
 	typeof GqlExecutionContextType
 > {
 	if (!GqlExecutionContext) {

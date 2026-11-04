@@ -1,4 +1,11 @@
-import { Resolver, Query, ObjectType, Field } from "@nestjs/graphql";
+import {
+	Resolver,
+	Query,
+	ObjectType,
+	Field,
+	Mutation,
+	ResolveField,
+} from "@nestjs/graphql";
 import { AllowAnonymous, OptionalAuth, Roles } from "../../src/decorators.ts";
 import { Session } from "../../src/decorators.ts";
 import type { UserSession } from "../../src/auth-guard.ts";
@@ -16,6 +23,12 @@ class OptionalAuthenticatedResult {
 
 	@Field(() => String, { nullable: true })
 	userId?: string;
+}
+
+@ObjectType()
+class SessionItem {
+	@Field()
+	id!: string;
 }
 
 @Resolver()
@@ -52,5 +65,23 @@ export class TestResolver {
 		return {
 			userId: session?.user?.id,
 		};
+	}
+}
+
+@Resolver(() => SessionItem)
+export class SessionItemResolver {
+	@Query(() => [SessionItem])
+	sessionItems(): SessionItem[] {
+		return [{ id: "1" }, { id: "2" }, { id: "3" }];
+	}
+
+	@Mutation(() => String, { nullable: true })
+	sessionUserId(@Session() session: UserSession) {
+		return session?.user?.id;
+	}
+
+	@ResolveField(() => String, { nullable: true })
+	userId(@Session() session: UserSession) {
+		return session?.user?.id;
 	}
 }

@@ -16,7 +16,7 @@ import {
 	type AuthModuleOptions,
 	MODULE_OPTIONS_TOKEN,
 } from "./auth-module-definition.ts";
-import { getRequestFromContext } from "./utils.ts";
+import { getGqlExecutionContext, getRequestFromContext } from "./utils.ts";
 
 /**
  * Type representing a valid user session after authentication
@@ -123,6 +123,16 @@ const AuthContextErrorMap: Record<
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
+	/**
+	 * Session lookups shared by the fields of one GraphQL query, keyed by its context object.
+	 * The context is created per operation, while `req` can outlive it (e.g. a graphql-ws socket).
+	 * Kept per guard, so each `AuthModule` registration checks against its own auth instance.
+	 */
+	private readonly sessionPromisesByGqlContext = new WeakMap<
+		object,
+		Promise<UserSession | null>
+	>();
+
 	constructor(
 		@Inject(Reflector)
 		private readonly reflector: Reflector,
@@ -139,11 +149,7 @@ export class AuthGuard implements CanActivate {
 	 */
 	async canActivate(context: ExecutionContext): Promise<boolean> {
 		const request = await getRequestFromContext(context);
-		const session: UserSession | null = await this.options.auth.api.getSession({
-			headers: fromNodeHeaders(
-				request.headers || request?.handshake?.headers || [],
-			),
-		});
+		const session = await this.getSessionOnce(context, request);
 
 		request.session = session;
 		request.user = session?.user ?? null; // useful for observability tools like Sentry
@@ -245,6 +251,55 @@ export class AuthGuard implements CanActivate {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Fetches the session, once per GraphQL query operation.
+	 * With `fieldResolverEnhancers: ["guards"]` this guard runs before every resolved field,
+	 * so the lookup is shared by all fields of the same query instead of repeated per field.
+	 * Trade-off: a session revoked while a query runs is only rejected from the next operation on.
+	 * A failed lookup is not kept, so a later field retries it.
+	 * Mutations and subscriptions fetch on every check: a mutation field can sign out
+	 * before the next one runs, and a subscription's context lives as long as the subscription.
+	 */
+	private async getSessionOnce(
+		context: ExecutionContext,
+		// biome-ignore lint/suspicious/noExplicitAny: request shape differs per transport
+		request: any,
+	): Promise<UserSession | null> {
+		const fetchSession = () =>
+			this.options.auth.api.getSession({
+				headers: fromNodeHeaders(
+					request.headers || request?.handshake?.headers || [],
+				),
+			}) as Promise<UserSession | null>;
+
+		if (context.getType<ContextType | "graphql">() !== "graphql") {
+			return fetchSession();
+		}
+
+		const gqlContext = (await getGqlExecutionContext()).create(context);
+		const contextValue = gqlContext.getContext();
+		if (
+			gqlContext.getInfo()?.operation?.operation !== "query" ||
+			typeof contextValue !== "object" ||
+			contextValue === null
+		) {
+			return fetchSession();
+		}
+
+		let sessionPromise = this.sessionPromisesByGqlContext.get(contextValue);
+		if (!sessionPromise) {
+			const pending = fetchSession();
+			this.sessionPromisesByGqlContext.set(contextValue, pending);
+			pending.catch(() => {
+				if (this.sessionPromisesByGqlContext.get(contextValue) === pending) {
+					this.sessionPromisesByGqlContext.delete(contextValue);
+				}
+			});
+			sessionPromise = pending;
+		}
+		return sessionPromise;
 	}
 
 	/**
