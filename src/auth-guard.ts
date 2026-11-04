@@ -257,6 +257,8 @@ export class AuthGuard implements CanActivate {
 	 * Fetches the session, once per GraphQL query operation.
 	 * With `fieldResolverEnhancers: ["guards"]` this guard runs before every resolved field,
 	 * so the lookup is shared by all fields of the same query instead of repeated per field.
+	 * Trade-off: a session revoked while a query runs is only rejected from the next operation on.
+	 * A failed lookup is not kept, so a later field retries it.
 	 * Mutations and subscriptions fetch on every check: a mutation field can sign out
 	 * before the next one runs, and a subscription's context lives as long as the subscription.
 	 */
@@ -288,8 +290,14 @@ export class AuthGuard implements CanActivate {
 
 		let sessionPromise = this.sessionPromisesByGqlContext.get(contextValue);
 		if (!sessionPromise) {
-			sessionPromise = fetchSession();
-			this.sessionPromisesByGqlContext.set(contextValue, sessionPromise);
+			const pending = fetchSession();
+			this.sessionPromisesByGqlContext.set(contextValue, pending);
+			pending.catch(() => {
+				if (this.sessionPromisesByGqlContext.get(contextValue) === pending) {
+					this.sessionPromisesByGqlContext.delete(contextValue);
+				}
+			});
+			sessionPromise = pending;
 		}
 		return sessionPromise;
 	}

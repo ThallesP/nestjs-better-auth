@@ -91,6 +91,8 @@ If you configure `trustedOrigins`, this module also applies Better Auth CORS hea
 
 GraphQL is supported and works the same way as REST: the global guard applies to resolvers too, and you can use `@AllowAnonymous()`/`@OptionalAuth()` on queries and mutations.
 
+With `fieldResolverEnhancers: ["guards"]` the guard also runs on every resolved field. All fields of one query then share a single session lookup, so a session revoked while that query runs is only rejected from the next operation on. Mutations and subscriptions look the session up on every check.
+
 WebSocket is also supported and works in the same way as REST and GraphQL: you can use `@AllowAnonymous()`/`@OptionalAuth()` on any connections, but you must set the AuthGuard for all of them, either at the Gateway or Message level, like so:
 
 ```ts
