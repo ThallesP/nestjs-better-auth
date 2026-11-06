@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
+import bodyParsers from "body-parser";
 import type { AuthModuleOptions } from "./auth-module-definition.ts";
 import type {
 	JsonBodyParserOptions,
@@ -30,7 +31,7 @@ export interface SkipBodyParsingMiddlewareOptions {
 	/**
 	 * The `getType()` of the Nest HTTP adapter. It selects which package
 	 * provides the JSON and URL-encoded parsers: `@nestjs/platform-node` for
-	 * `"node"` (so `express` does not have to be installed), `express` otherwise.
+	 * `"node"` (so `express` does not have to be installed), `body-parser` otherwise.
 	 * @default "express"
 	 */
 	adapterType?: string;
@@ -65,14 +66,15 @@ type ResponseLike = ServerResponse<IncomingMessage> & {
 
 /**
  * Loads the body parsers of the active adapter. `@nestjs/platform-node` ships
- * its own `json()`/`urlencoded()`, which take the same options as `body-parser`.
+ * its own `json()`/`urlencoded()`, which take the same options as `body-parser`;
+ * every other adapter uses `body-parser`, a direct dependency of this package.
  */
 function getBodyParserModule(adapterType: string): BodyParserModule {
 	if (adapterType === "node") {
 		return require("@nestjs/platform-node/body-parser/body-parser") as BodyParserModule;
 	}
 
-	return require("express") as BodyParserModule;
+	return bodyParsers;
 }
 
 export type ResolvedJsonBodyParserOptions = JsonBodyParserOptions & {
