@@ -68,6 +68,63 @@ describe("rest auth e2e", () => {
 		});
 	});
 
+	it("should allow anonymous access to an optional route without authorization decorators", async () => {
+		const response = await request(testSetup.app.getHttpServer())
+			.get("/optional-controller/open")
+			.expect(200);
+
+		expect(response.body).toMatchObject({ authenticated: false });
+	});
+
+	it("should require a session on an optional route that declares @Roles()", async () => {
+		await request(testSetup.app.getHttpServer())
+			.get("/optional-controller/admin-only")
+			.expect(401);
+	});
+
+	it("should require a session on an optional route that declares @RequireActiveOrg()", async () => {
+		await request(testSetup.app.getHttpServer())
+			.get("/optional-controller/active-org-only")
+			.expect(401);
+	});
+
+	it("should still check @Roles() on an optional route when a session is present", async () => {
+		const signUp = await testSetup.auth.api.signUpEmail({
+			body: {
+				name: faker.person.fullName(),
+				email: faker.internet.email(),
+				password: faker.internet.password({ length: 10 }),
+			},
+		});
+
+		await request(testSetup.app.getHttpServer())
+			.get("/optional-controller/admin-only")
+			.set("Authorization", `Bearer ${signUp.token}`)
+			.expect(403);
+
+		const password = faker.internet.password({ length: 10 });
+		const adminUser = await testSetup.auth.api.createUser({
+			body: {
+				name: "Admin",
+				email: faker.internet.email(),
+				password,
+				role: "admin",
+			},
+		});
+		const admin = await testSetup.auth.api.signInEmail({
+			body: { email: adminUser.user.email, password },
+		});
+
+		const response = await request(testSetup.app.getHttpServer())
+			.get("/optional-controller/admin-only")
+			.set("Authorization", `Bearer ${admin.token}`)
+			.expect(200);
+
+		expect(response.body).toMatchObject({
+			user: expect.objectContaining({ id: admin.user.id }),
+		});
+	});
+
 	it("should be able to sign up and authenticate", async () => {
 		const signUp = await testSetup.auth.api.signUpEmail({
 			body: {

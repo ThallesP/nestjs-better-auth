@@ -7,7 +7,7 @@ import type { Request, Response } from "express";
 import { bearer } from "better-auth/plugins/bearer";
 import { AuthModule } from "../../src/index.ts";
 import { betterAuth } from "better-auth";
-import { TestController } from "./test-controller.ts";
+import { OptionalAuthController, TestController } from "./test-controller.ts";
 import { TestResolver } from "./test-resolver.ts";
 import { TestGateway } from "./test-gateway.ts";
 import { admin } from "better-auth/plugins/admin";
@@ -64,7 +64,7 @@ export function createTestAppModule(
 				}),
 			}),
 		],
-		controllers: [TestController],
+		controllers: [TestController, OptionalAuthController],
 		providers: [TestResolver, TestGateway],
 	})
 	class AppModule {}

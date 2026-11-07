@@ -160,53 +160,21 @@ export class AuthGuard implements CanActivate {
 			context.getClass(),
 		]);
 
-		if (!session && isOptional) return true;
-
-		const ctxType = context.getType();
-		if (!session) throw await AuthContextErrorMap[ctxType].UNAUTHORIZED();
-
-		const headers = fromNodeHeaders(
-			request.headers || request?.handshake?.headers || [],
-		);
-
 		const requireActiveOrg = this.reflector.getAllAndOverride<boolean>(
 			"REQUIRE_ACTIVE_ORG",
 			[context.getHandler(), context.getClass()],
 		);
 
-		if (requireActiveOrg && !session.session?.activeOrganizationId) {
-			throw await AuthContextErrorMap[ctxType].FORBIDDEN({
-				message: "Active organization is required",
-			});
-		}
-
-		// Check @Roles() - user.role only (admin plugin)
 		const requiredRoles = this.reflector.getAllAndOverride<string[]>("ROLES", [
 			context.getHandler(),
 			context.getClass(),
 		]);
 
-		if (requiredRoles && requiredRoles.length > 0) {
-			const hasRole = this.checkUserRole(session, requiredRoles);
-			if (!hasRole) throw await AuthContextErrorMap[ctxType].FORBIDDEN();
-		}
-
-		// Check @OrgRoles() - organization member role only
 		const requiredOrgRoles = this.reflector.getAllAndOverride<string[]>(
 			"ORG_ROLES",
 			[context.getHandler(), context.getClass()],
 		);
 
-		if (requiredOrgRoles && requiredOrgRoles.length > 0) {
-			const hasOrgRole = await this.checkOrgRole(
-				session,
-				headers,
-				requiredOrgRoles,
-			);
-			if (!hasOrgRole) throw await AuthContextErrorMap[ctxType].FORBIDDEN();
-		}
-
-		// Check @UserHasPermission() - permission-based access control
 		const permissionCheck = this.reflector.getAllAndOverride<
 			| {
 					userId?: string;
@@ -217,6 +185,54 @@ export class AuthGuard implements CanActivate {
 			| undefined
 		>("USER_HAS_PERMISSION", [context.getHandler(), context.getClass()]);
 
+		const memberPermissionCheck = this.reflector.getAllAndOverride<
+			| {
+					permissions: Record<string, string[]>;
+			  }
+			| undefined
+		>("MEMBER_HAS_PERMISSION", [context.getHandler(), context.getClass()]);
+
+		// Authorization decorators cannot be satisfied without a session, so an
+		// optional route that declares one still requires authentication.
+		const requiresAuthorization =
+			!!requireActiveOrg ||
+			(requiredRoles?.length ?? 0) > 0 ||
+			(requiredOrgRoles?.length ?? 0) > 0 ||
+			!!permissionCheck ||
+			!!memberPermissionCheck;
+
+		if (!session && isOptional && !requiresAuthorization) return true;
+
+		const ctxType = context.getType();
+		if (!session) throw await AuthContextErrorMap[ctxType].UNAUTHORIZED();
+
+		const headers = fromNodeHeaders(
+			request.headers || request?.handshake?.headers || [],
+		);
+
+		if (requireActiveOrg && !session.session?.activeOrganizationId) {
+			throw await AuthContextErrorMap[ctxType].FORBIDDEN({
+				message: "Active organization is required",
+			});
+		}
+
+		// Check @Roles() - user.role only (admin plugin)
+		if (requiredRoles && requiredRoles.length > 0) {
+			const hasRole = this.checkUserRole(session, requiredRoles);
+			if (!hasRole) throw await AuthContextErrorMap[ctxType].FORBIDDEN();
+		}
+
+		// Check @OrgRoles() - organization member role only
+		if (requiredOrgRoles && requiredOrgRoles.length > 0) {
+			const hasOrgRole = await this.checkOrgRole(
+				session,
+				headers,
+				requiredOrgRoles,
+			);
+			if (!hasOrgRole) throw await AuthContextErrorMap[ctxType].FORBIDDEN();
+		}
+
+		// Check @UserHasPermission() - permission-based access control
 		if (permissionCheck) {
 			const hasPermission = await this.checkUserPermission(
 				session,
@@ -227,13 +243,6 @@ export class AuthGuard implements CanActivate {
 		}
 
 		// Check @MemberHasPermission() - organization member permission-based access control
-		const memberPermissionCheck = this.reflector.getAllAndOverride<
-			| {
-					permissions: Record<string, string[]>;
-			  }
-			| undefined
-		>("MEMBER_HAS_PERMISSION", [context.getHandler(), context.getClass()]);
-
 		if (memberPermissionCheck) {
 			const hasMemberPermission = await this.checkMemberPermission(
 				session,

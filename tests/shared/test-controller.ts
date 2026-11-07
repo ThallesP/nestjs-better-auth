@@ -117,3 +117,25 @@ export class ActiveOrgController {
 		return { user: req.user, session: req.session };
 	}
 }
+
+// Optional auth on the controller, authorization decorators on single handlers
+@OptionalAuth()
+@Controller("optional-controller")
+export class OptionalAuthController {
+	@Get("open")
+	open(@Request() req: UserSession) {
+		return { authenticated: !!req.user };
+	}
+
+	@Roles(["admin"])
+	@Get("admin-only")
+	adminOnly(@Request() req: UserSession) {
+		return { user: req.user };
+	}
+
+	@RequireActiveOrg()
+	@Get("active-org-only")
+	activeOrgOnly(@Request() req: UserSession) {
+		return { user: req.user };
+	}
+}

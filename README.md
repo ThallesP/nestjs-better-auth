@@ -172,6 +172,8 @@ export class OptionalController {
 }
 ```
 
+`@AllowAnonymous()` always wins: role and permission decorators are not checked on a public route. On an `@OptionalAuth()` route, a role, permission or active-organization decorator still requires a session, because it cannot be checked without one.
+
 ### Role-Based Access Control
 
 This library provides two role decorators for different use cases:

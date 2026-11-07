@@ -25,7 +25,8 @@ export const AllowAnonymous = (): CustomDecorator<string> =>
 /**
  * Marks a route or controller as having optional authentication.
  * When applied, the AuthGuard allows the request to proceed
- * even if no session is present.
+ * even if no session is present, unless the route also declares a role,
+ * permission or active-organization requirement.
  */
 export const OptionalAuth = (): CustomDecorator<string> =>
 	SetMetadata("OPTIONAL", true);
