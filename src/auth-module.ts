@@ -319,6 +319,12 @@ export class AuthModule
 						? await runWrappedHook(originalHook, ctx)
 						: undefined;
 
+					// Better Auth answers the request with the first before hook
+					// result that is not `{ context }`, so the provider must not run.
+					if (hookType === "before" && isBeforeHookResponse(originalResult)) {
+						return originalResult;
+					}
+
 					if (hookPath && hookPath !== ctx.path) return originalResult;
 
 					const providerResult = await providerMethod.apply(providerClass, [
@@ -445,24 +451,25 @@ async function runWrappedHook(
 	ctx: HookContext,
 ): Promise<unknown> {
 	const result = await hook({ ...ctx, returnHeaders: true });
+	// better-call's envelope is `{ headers: Headers, response }`. A hook that
+	// is a plain function ignores `returnHeaders`, so its own payload, even one
+	// with those keys, comes back as is.
 	if (
 		!result ||
 		typeof result !== "object" ||
 		!("headers" in result) ||
-		!("response" in result)
+		!("response" in result) ||
+		!(result.headers instanceof Headers)
 	) {
 		return result;
 	}
 
-	const { headers, response } = result as {
-		headers?: Headers;
-		response: unknown;
-	};
+	const { headers, response } = result;
 	// better-call exposes the header store at runtime; `setHeader` would
 	// collapse several `set-cookie` values into one.
 	const responseHeaders = (ctx as { responseHeaders?: Headers })
 		.responseHeaders;
-	headers?.forEach((value, key) => {
+	headers.forEach((value, key) => {
 		if (key.toLowerCase() === "set-cookie" && responseHeaders) {
 			responseHeaders.append(key, value);
 		} else {
@@ -485,6 +492,14 @@ function hasHookContext(
 	result: unknown,
 ): result is { context: Record<string, unknown> } {
 	return isPlainObject(result) && isPlainObject(result.context);
+}
+
+/**
+ * Whether a before hook result is a response Better Auth answers the request
+ * with, instead of a `{ context }` to merge or nothing.
+ */
+function isBeforeHookResponse(result: unknown): boolean {
+	return !!result && typeof result === "object" && !hasHookContext(result);
 }
 
 /**

@@ -238,6 +238,196 @@ describe("hooks return values", () => {
 	});
 });
 
+@Injectable()
+class BeforeProviderTracker {
+	calls = 0;
+}
+
+@Hook()
+@Injectable()
+class SignUpBeforeTrackedHook {
+	constructor(private readonly tracker: BeforeProviderTracker) {}
+
+	@BeforeHook("/sign-up/email")
+	async handle() {
+		this.tracker.calls += 1;
+		return { context: { body: { name: "from-provider" } } };
+	}
+}
+
+@Hook()
+@Injectable()
+class SignUpAfterCookieHookOne {
+	@AfterHook("/sign-up/email")
+	async handle(ctx: AuthHookContext) {
+		ctx.setCookie("after-provider-one", "1");
+	}
+}
+
+@Hook()
+@Injectable()
+class SignUpAfterCookieHookTwo {
+	@AfterHook("/sign-up/email")
+	async handle(ctx: AuthHookContext) {
+		ctx.setCookie("after-provider-two", "1");
+	}
+}
+
+describe("hooks short-circuit", () => {
+	let app: INestApplication;
+	let auth: ReturnType<typeof betterAuth>;
+
+	const signUpBody = (email: string) => ({
+		name: faker.person.fullName(),
+		email,
+		password: faker.internet.password({ length: 10 }),
+	});
+
+	beforeAll(async () => {
+		auth = betterAuth({
+			basePath: "/api/auth",
+			emailAndPassword: { enabled: true },
+			plugins: [bearer()],
+			hooks: {
+				before: createAuthMiddleware(async (ctx) => {
+					if (ctx.path !== "/sign-up/email") return;
+					if (ctx.body?.email?.startsWith("blocked-")) {
+						return { blocked: true };
+					}
+				}),
+				after: createAuthMiddleware(async (ctx) => {
+					ctx.setCookie("after-hook", "1");
+				}),
+			},
+		});
+
+		@Module({
+			imports: [AuthModule.forRoot({ auth })],
+			providers: [
+				BeforeProviderTracker,
+				SignUpBeforeTrackedHook,
+				SignUpAfterCookieHookOne,
+				SignUpAfterCookieHookTwo,
+			],
+		})
+		class AppModule {}
+
+		const moduleRef = await Test.createTestingModule({
+			imports: [AppModule],
+		}).compile();
+
+		app = await createTestNestApplication(moduleRef);
+	});
+
+	afterAll(async () => {
+		await app.close();
+	});
+
+	// The short-circuit is asserted through `auth.api` rather than over HTTP:
+	// better-auth 1.5.4 builds a before hook's short-circuit response with the
+	// request's own headers, content-length included, so the body that reaches
+	// a Node HTTP client is truncated or the response never completes.
+	it("should not run a @BeforeHook provider once the original before hook short-circuited", async () => {
+		const tracker = app.get(BeforeProviderTracker);
+		tracker.calls = 0;
+		const email = `blocked-${faker.internet.email()}`;
+
+		const result = await auth.api.signUpEmail({ body: signUpBody(email) });
+
+		expect(result).toEqual({ blocked: true });
+		expect(tracker.calls).toBe(0);
+		const { internalAdapter } = await auth.$context;
+		expect(await internalAdapter.findUserByEmail(email)).toBeNull();
+	});
+
+	it("should still run the @BeforeHook provider when the original before hook does not short-circuit", async () => {
+		const tracker = app.get(BeforeProviderTracker);
+		tracker.calls = 0;
+
+		const response = await request(app.getHttpServer())
+			.post("/api/auth/sign-up/email")
+			.set("Content-Type", "application/json")
+			.send(signUpBody(faker.internet.email()))
+			.expect(200);
+
+		expect(tracker.calls).toBe(1);
+		expect(response.body.user.name).toBe("from-provider");
+	});
+
+	it("should send every cookie set by the original after hook and by each @AfterHook provider", async () => {
+		const response = await request(app.getHttpServer())
+			.post("/api/auth/sign-up/email")
+			.set("Content-Type", "application/json")
+			.send(signUpBody(faker.internet.email()))
+			.expect(200);
+
+		const cookies = response.headers["set-cookie"] as unknown as string[];
+		expect(cookies.filter((c) => c.startsWith("after-hook=1"))).toHaveLength(1);
+		expect(
+			cookies.filter((c) => c.startsWith("after-provider-one=1")),
+		).toHaveLength(1);
+		expect(
+			cookies.filter((c) => c.startsWith("after-provider-two=1")),
+		).toHaveLength(1);
+	});
+});
+
+describe("hooks with a plain function as the original hook", () => {
+	let app: INestApplication;
+	let auth: ReturnType<typeof betterAuth>;
+
+	beforeAll(async () => {
+		auth = betterAuth({
+			basePath: "/api/auth",
+			emailAndPassword: { enabled: true },
+			plugins: [bearer()],
+			hooks: {
+				// Not wrapped in createAuthMiddleware, so it ignores `returnHeaders`
+				// and its own payload comes back as is.
+				before: (async (ctx: { path: string }) => {
+					if (ctx.path !== "/sign-up/email") return;
+					return { headers: { "x-not-an-envelope": "1" }, response: "denied" };
+				}) as never,
+			},
+		});
+
+		@Module({
+			imports: [AuthModule.forRoot({ auth })],
+			providers: [BeforeProviderTracker, SignUpBeforeTrackedHook],
+		})
+		class AppModule {}
+
+		const moduleRef = await Test.createTestingModule({
+			imports: [AppModule],
+		}).compile();
+
+		app = await createTestNestApplication(moduleRef);
+	});
+
+	afterAll(async () => {
+		await app.close();
+	});
+
+	it("should leave a payload that merely has headers/response keys untouched", async () => {
+		const tracker = app.get(BeforeProviderTracker);
+		tracker.calls = 0;
+
+		const result = await auth.api.signUpEmail({
+			body: {
+				name: faker.person.fullName(),
+				email: faker.internet.email(),
+				password: faker.internet.password({ length: 10 }),
+			},
+		});
+
+		expect(result).toEqual({
+			headers: { "x-not-an-envelope": "1" },
+			response: "denied",
+		});
+		expect(tracker.calls).toBe(0);
+	});
+});
+
 describe("hooks configuration validation", () => {
 	it("should throw if hook providers exist without hooks configured", async () => {
 		const auth = betterAuth({
