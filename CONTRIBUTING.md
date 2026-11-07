@@ -45,13 +45,15 @@ bun run test
 | `bun run check`         | Lint **and** format check (Biome) — run before a PR   |
 | `bun run lint`          | Lint only                                             |
 | `bun run format`        | Format only                                           |
-| `bun run test`          | Run the full suite on both adapters (Express + Fastify) |
+| `bun run test`          | Run the full suite on every adapter (Express, Fastify + Node) |
 | `bun run test:express`  | Run the suite on the Express adapter                  |
 | `bun run test:fastify`  | Run the suite on the Fastify adapter                  |
+| `bun run test:node`     | Run the suite on the Node adapter                     |
 | `bun run test:watch`    | Run tests in watch mode                               |
 
-This library is HTTP-adapter agnostic and supports both **Express** and
-**Fastify**, so please make sure your change passes on both adapters.
+This library is HTTP-adapter agnostic and supports **Express**, **Fastify** and
+the **Node** adapter (`@nestjs/platform-node`), so please make sure your change
+passes on all of them.
 
 ## Opening a pull request
 

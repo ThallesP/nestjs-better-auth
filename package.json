@@ -25,11 +25,12 @@
 		"lint": "biome lint",
 		"format": "biome format",
 		"check": "biome check",
-		"test": "bun run test:express && bun run test:fastify",
+		"test": "bun run test:express && bun run test:fastify && bun run test:node",
 		"test:watch": "vitest",
 		"test:express": "TEST_HTTP_ADAPTER=express vitest run",
 		"test:fastify": "TEST_HTTP_ADAPTER=fastify vitest run",
-		"test:adapters": "sh -c 'status=0; bun run test:express & pid1=$!; bun run test:fastify & pid2=$!; wait $pid1 || status=$?; wait $pid2 || status=$?; exit $status'"
+		"test:node": "TEST_HTTP_ADAPTER=node vitest run",
+		"test:adapters": "sh -c 'status=0; bun run test:express & pid1=$!; bun run test:fastify & pid2=$!; bun run test:node & pid3=$!; wait $pid1 || status=$?; wait $pid2 || status=$?; wait $pid3 || status=$?; exit $status'"
 	},
 	"types": "dist/index.d.ts",
 	"exports": {
@@ -54,6 +55,7 @@
 		"@nestjs/graphql": "^14.0.0",
 		"@nestjs/platform-fastify": "^12.0.1",
 		"@nestjs/platform-express": "^12.0.1",
+		"@nestjs/platform-node": "^12.3.0",
 		"@nestjs/platform-socket.io": "^12.0.1",
 		"@nestjs/testing": "^12.0.1",
 		"@nestjs/websockets": "^12.0.1",
@@ -81,6 +83,7 @@
 		"@nestjs/common": "^11.1.6 || ^12.0.0",
 		"@nestjs/core": "^11.1.6 || ^12.0.0",
 		"@nestjs/graphql": "^13.1.0 || ^14.0.0",
+		"@nestjs/platform-node": "^12.3.0",
 		"@nestjs/websockets": "^11.1.6 || ^12.0.0",
 		"better-auth": ">=1.5.0 <2.0.0",
 		"express": "^5.1.0",
@@ -90,6 +93,9 @@
 	},
 	"peerDependenciesMeta": {
 		"@nestjs/graphql": {
+			"optional": true
+		},
+		"@nestjs/platform-node": {
 			"optional": true
 		},
 		"@nestjs/websockets": {

@@ -81,6 +81,8 @@ export class AppModule {}
 
 Both `bodyParser.json` and `bodyParser.urlencoded` accept parser options plus an `enabled` flag if you want to disable either parser individually. Set `bodyParser.rawBody` to `true` if you also want Nest-style `req.rawBody` support.
 
+On the Node adapter (`@nestjs/platform-node`), the module uses that package's own JSON and URL-encoded parsers, so `express` does not need to be installed. They take the same options as the Express ones.
+
 On Fastify, `bodyParser.urlencoded` with `extended: true` uses the optional peer dependency `qs`. Install `qs` in your application if you want nested URL-encoded parsing there.
 
 If you configure `trustedOrigins`, this module also applies Better Auth CORS headers for auth routes. On Fastify, Better Auth routes are mounted through middleware, so app-level `@fastify/cors` does not fully cover them by itself.

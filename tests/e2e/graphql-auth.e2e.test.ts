@@ -2,7 +2,11 @@ import request from "supertest";
 import { faker } from "@faker-js/faker";
 import { createTestApp, type TestAppSetup } from "../shared/test-utils.ts";
 
-describe("graphql auth e2e", () => {
+// Apollo's driver does not support the Node adapter.
+const describeGraphql =
+	process.env.TEST_HTTP_ADAPTER === "node" ? describe.skip : describe;
+
+describeGraphql("graphql auth e2e", () => {
 	let testSetup: TestAppSetup;
 
 	beforeAll(async () => {

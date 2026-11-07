@@ -5,13 +5,22 @@ import type {
 } from "@nestjs/common";
 import { ExpressAdapter } from "@nestjs/platform-express";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
+import { NodeAdapter } from "@nestjs/platform-node";
 import type { TestingModule } from "@nestjs/testing";
 
 const testHttpAdapter = process.env.TEST_HTTP_ADAPTER ?? "express";
 
+/**
+ * Builds the Nest HTTP adapter selected by `TEST_HTTP_ADAPTER`
+ * (`express` by default, `fastify` or `node`).
+ */
 export function createTestHttpAdapter() {
 	if (testHttpAdapter === "fastify") {
 		return new FastifyAdapter();
+	}
+
+	if (testHttpAdapter === "node") {
+		return new NodeAdapter();
 	}
 
 	return new ExpressAdapter();

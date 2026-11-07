@@ -39,7 +39,11 @@ export function createTestAuth(authOptions?: Partial<BetterAuthOptions>) {
 	});
 }
 
-// Test app module factory
+/**
+ * Test app module factory. Registers `AuthModule` (sync or async) plus the
+ * test controller, resolver and gateway; GraphQL is left out under the Node
+ * adapter because Apollo's driver does not support it.
+ */
 export function createTestAppModule(
 	async: boolean,
 	auth: ReturnType<typeof createTestAuth>,
@@ -51,19 +55,25 @@ export function createTestAppModule(
 			})
 		: AuthModule.forRoot({ auth, ...options });
 
+	// Apollo's driver only supports Express and Fastify, so there is no GraphQL
+	// endpoint to mount under the Node adapter.
+	const graphqlModules =
+		process.env.TEST_HTTP_ADAPTER === "node"
+			? []
+			: [
+					GraphQLModule.forRoot<ApolloDriverConfig>({
+						driver: ApolloDriver,
+						autoSchemaFile: true,
+						path: "/graphql",
+						context: ({ req, res }: { req: Request; res: Response }) => ({
+							req,
+							res,
+						}),
+					}),
+				];
+
 	@Module({
-		imports: [
-			authModule,
-			GraphQLModule.forRoot<ApolloDriverConfig>({
-				driver: ApolloDriver,
-				autoSchemaFile: true,
-				path: "/graphql",
-				context: ({ req, res }: { req: Request; res: Response }) => ({
-					req,
-					res,
-				}),
-			}),
-		],
+		imports: [authModule, ...graphqlModules],
 		controllers: [TestController],
 		providers: [TestResolver, TestGateway],
 	})

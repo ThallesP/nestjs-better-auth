@@ -16,6 +16,7 @@ jobs:
         adapter:
           - express
           - fastify
+          - node
 
     steps:
       - name: Checkout code
