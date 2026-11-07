@@ -469,6 +469,8 @@ export class SignUpHook {
 }
 ```
 
+Hook methods can return what a Better Auth hook returns (`{ context }` from a `before` hook, a replacement response from an `after` hook). The `hooks.before` / `hooks.after` you configure in `betterAuth(...)` run first, then the `@Hook` providers. If both return a value, the provider's wins, except that two `{ context }` results are deep-merged (the provider's fields take precedence). Headers and cookies set through `ctx.setHeader` / `ctx.setCookie` are kept from every hook.
+
 Register your hooks in a module:
 
 ```ts title="app.module.ts"

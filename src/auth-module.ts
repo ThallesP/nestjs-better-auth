@@ -315,13 +315,17 @@ export class AuthModule
 			const originalHook = this.options.auth.options.hooks[hookType];
 			this.options.auth.options.hooks[hookType] = createAuthMiddleware(
 				async (ctx) => {
-					if (originalHook) {
-						await originalHook(ctx);
-					}
+					const originalResult = originalHook
+						? await runWrappedHook(originalHook, ctx)
+						: undefined;
 
-					if (hookPath && hookPath !== ctx.path) return;
+					if (hookPath && hookPath !== ctx.path) return originalResult;
 
-					await providerMethod.apply(providerClass, [ctx]);
+					const providerResult = await providerMethod.apply(providerClass, [
+						ctx,
+					]);
+
+					return mergeHookResults(originalResult, providerResult);
 				},
 			);
 		}
@@ -426,6 +430,92 @@ export class AuthModule
 			],
 		};
 	}
+}
+
+type HookContext = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
+
+/**
+ * Runs a previously registered hook (the user's own or an earlier wrapper).
+ * A Better Auth middleware keeps the headers set through `ctx.setHeader` /
+ * `ctx.setCookie` in its own invocation, so they are copied onto the current
+ * context and only the hook's response is returned.
+ */
+async function runWrappedHook(
+	hook: (ctx: unknown) => unknown,
+	ctx: HookContext,
+): Promise<unknown> {
+	const result = await hook({ ...ctx, returnHeaders: true });
+	if (
+		!result ||
+		typeof result !== "object" ||
+		!("headers" in result) ||
+		!("response" in result)
+	) {
+		return result;
+	}
+
+	const { headers, response } = result as {
+		headers?: Headers;
+		response: unknown;
+	};
+	// better-call exposes the header store at runtime; `setHeader` would
+	// collapse several `set-cookie` values into one.
+	const responseHeaders = (ctx as { responseHeaders?: Headers })
+		.responseHeaders;
+	headers?.forEach((value, key) => {
+		if (key.toLowerCase() === "set-cookie" && responseHeaders) {
+			responseHeaders.append(key, value);
+		} else {
+			ctx.setHeader(key, value);
+		}
+	});
+
+	return response;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return (
+		!!value &&
+		typeof value === "object" &&
+		Object.getPrototypeOf(value) === Object.prototype
+	);
+}
+
+function hasHookContext(
+	result: unknown,
+): result is { context: Record<string, unknown> } {
+	return isPlainObject(result) && isPlainObject(result.context);
+}
+
+/**
+ * Deep-merges plain objects, `patch` winning; anything else (arrays, Headers)
+ * is replaced, as Better Auth itself merges `{ context }` across hooks.
+ */
+function mergeContexts(
+	base: Record<string, unknown>,
+	patch: Record<string, unknown>,
+): Record<string, unknown> {
+	const merged = { ...base };
+	for (const [key, value] of Object.entries(patch)) {
+		const current = merged[key];
+		merged[key] =
+			isPlainObject(current) && isPlainObject(value)
+				? mergeContexts(current, value)
+				: value;
+	}
+	return merged;
+}
+
+/**
+ * The provider's result wins over the original hook's; `{ context }` results
+ * of before hooks are merged instead, the provider's fields taking precedence.
+ */
+function mergeHookResults(original: unknown, provider: unknown): unknown {
+	if (hasHookContext(original) && hasHookContext(provider)) {
+		return { context: mergeContexts(original.context, provider.context) };
+	}
+
+	return provider ?? original;
 }
 
 class AuthModuleWithoutControllers extends AuthModule {

@@ -4,6 +4,7 @@ import { faker } from "@faker-js/faker";
 import { Module, Injectable, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { betterAuth } from "better-auth";
+import { createAuthMiddleware } from "better-auth/api";
 import { bearer } from "better-auth/plugins/bearer";
 import {
 	AuthModule,
@@ -111,6 +112,129 @@ describe("hooks e2e", () => {
 			.expect(200);
 
 		expect(tracker.afterCalls).toBe(before + 1);
+	});
+});
+
+@Hook()
+@Injectable()
+class SignUpAfterHookOne {
+	@AfterHook("/sign-up/email")
+	async handle(ctx: AuthHookContext) {
+		ctx.setHeader("x-after-provider-one", "1");
+		return { ...(ctx.context.returned as object), fromProviderOne: true };
+	}
+}
+
+@Hook()
+@Injectable()
+class SignUpAfterHookTwo {
+	@AfterHook("/sign-up/email")
+	async handle(ctx: AuthHookContext) {
+		ctx.setHeader("x-after-provider-two", "1");
+	}
+}
+
+@Hook()
+@Injectable()
+class SignUpBeforeContextHook {
+	@BeforeHook("/sign-up/email")
+	async handle() {
+		return { context: { body: { image: "https://example.com/avatar.png" } } };
+	}
+}
+
+describe("hooks return values", () => {
+	let app: INestApplication;
+
+	beforeAll(async () => {
+		const auth = betterAuth({
+			basePath: "/api/auth",
+			emailAndPassword: { enabled: true },
+			plugins: [bearer()],
+			hooks: {
+				before: createAuthMiddleware(async (ctx) => {
+					if (ctx.path !== "/sign-up/email") return;
+					return {
+						context: { body: { ...ctx.body, name: "from-before-hook" } },
+					};
+				}),
+				after: createAuthMiddleware(async (ctx) => {
+					ctx.setHeader("x-after-hook", "1");
+				}),
+			},
+		});
+
+		@Module({
+			imports: [AuthModule.forRoot({ auth })],
+			providers: [
+				HookTrackerService,
+				SignUpBeforeHook,
+				SignUpAfterHookOne,
+				SignUpAfterHookTwo,
+				SignUpBeforeContextHook,
+			],
+		})
+		class AppModule {}
+
+		const moduleRef = await Test.createTestingModule({
+			imports: [AppModule],
+		}).compile();
+
+		app = await createTestNestApplication(moduleRef);
+	});
+
+	afterAll(async () => {
+		await app.close();
+	});
+
+	it("should merge the context returned by the original before hook and by a @BeforeHook provider", async () => {
+		const response = await request(app.getHttpServer())
+			.post("/api/auth/sign-up/email")
+			.set("Content-Type", "application/json")
+			.send({
+				name: faker.person.fullName(),
+				email: faker.internet.email(),
+				password: faker.internet.password({ length: 10 }),
+			})
+			.expect(200);
+
+		expect(response.body.user).toMatchObject({
+			name: "from-before-hook",
+			image: "https://example.com/avatar.png",
+		});
+	});
+
+	it("should keep headers set by the original after hook and by every @AfterHook provider", async () => {
+		const response = await request(app.getHttpServer())
+			.post("/api/auth/sign-up/email")
+			.set("Content-Type", "application/json")
+			.send({
+				name: faker.person.fullName(),
+				email: faker.internet.email(),
+				password: faker.internet.password({ length: 10 }),
+			})
+			.expect(200);
+
+		expect(response.headers["x-after-hook"]).toBe("1");
+		expect(response.headers["x-after-provider-one"]).toBe("1");
+		expect(response.headers["x-after-provider-two"]).toBe("1");
+	});
+
+	it("should use the response returned by an @AfterHook provider", async () => {
+		const response = await request(app.getHttpServer())
+			.post("/api/auth/sign-up/email")
+			.set("Content-Type", "application/json")
+			.send({
+				name: faker.person.fullName(),
+				email: faker.internet.email(),
+				password: faker.internet.password({ length: 10 }),
+			})
+			.expect(200);
+
+		expect(response.body).toMatchObject({
+			token: expect.any(String),
+			fromProviderOne: true,
+		});
 	});
 });
 
