@@ -566,7 +566,7 @@ Available method decorators:
 
 Where `model` is one of: `"user"`, `"session"`, `"account"`, `"verification"`.
 
-`before` hooks can return `false` to abort the operation, or `{ data: ... }` to modify the data before it's written. `after` hooks are for side effects only.
+`before` hooks can return `false` to abort the operation, or `{ data: ... }` to modify the data before it's written. `after` hooks are for side effects only. The hook you configure in `databaseHooks` runs first, then the `@DatabaseHook` providers, each receiving the data as modified by the hooks before it; `false` stops the chain.
 
 ## AuthService
 
