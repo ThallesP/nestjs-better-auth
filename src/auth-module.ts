@@ -59,6 +59,30 @@ const DATABASE_HOOKS = [
 	{ metadataKey: AFTER_DATABASE_HOOK_KEY, hookType: "after" as const },
 ];
 
+type DatabaseHookFn = (data: unknown, ...rest: unknown[]) => unknown;
+
+/**
+ * Runs before database hooks in order with Better Auth's contract: `false`
+ * aborts the operation, `{ data }` is merged into the record handed to the
+ * next hook, and the merged record is returned as `{ data }`.
+ */
+function chainBeforeDatabaseHooks(
+	...hooks: (DatabaseHookFn | undefined)[]
+): DatabaseHookFn {
+	return async (data, ...rest) => {
+		let current = data;
+		for (const hook of hooks) {
+			if (!hook) continue;
+			const result = await hook(current, ...rest);
+			if (result === false) return false;
+			if (result && typeof result === "object" && "data" in result) {
+				current = { ...(current as object), ...(result.data as object) };
+			}
+		}
+		return current === data ? undefined : { data: current };
+	};
+}
+
 type AdapterRequest = ExpressRequest & {
 	raw?: ExpressRequest;
 	originalUrl?: string;
@@ -348,14 +372,19 @@ export class AuthModule
 			databaseHooks[model][operation] ??= {};
 
 			const originalHook = databaseHooks[model][operation][hookType];
-			databaseHooks[model][operation][hookType] = async (
-				...args: unknown[]
-			) => {
-				if (originalHook) {
-					await originalHook(...args);
-				}
-				return providerMethod.apply(providerClass, args);
-			};
+			const providerHook = (...args: unknown[]) =>
+				providerMethod.apply(providerClass, args);
+
+			// Better Auth reads the return value of before hooks only.
+			databaseHooks[model][operation][hookType] =
+				hookType === "before"
+					? chainBeforeDatabaseHooks(originalHook, providerHook)
+					: async (...args: unknown[]) => {
+							if (originalHook) {
+								await originalHook(...args);
+							}
+							return providerHook(...args);
+						};
 		}
 	}
 

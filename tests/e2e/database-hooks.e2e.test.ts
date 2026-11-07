@@ -163,6 +163,116 @@ describe("database hooks e2e", () => {
 	});
 });
 
+@Injectable()
+class BeforeCreateTracker {
+	received: { name?: string; image?: string }[] = [];
+}
+
+@DatabaseHook()
+@Injectable()
+class UserBeforeCreateHookOne {
+	@BeforeCreate("user")
+	async beforeCreate() {
+		return { data: { image: "https://example.com/avatar.png" } };
+	}
+}
+
+@DatabaseHook()
+@Injectable()
+class UserBeforeCreateHookTwo {
+	constructor(private readonly tracker: BeforeCreateTracker) {}
+
+	@BeforeCreate("user")
+	async beforeCreate(user: { name?: string; image?: string }) {
+		this.tracker.received.push({ name: user.name, image: user.image });
+	}
+}
+
+describe("database hooks return values", () => {
+	let app: INestApplication;
+
+	const signUp = (email = faker.internet.email()) =>
+		request(app.getHttpServer())
+			.post("/api/auth/sign-up/email")
+			.set("Content-Type", "application/json")
+			.send({
+				name: faker.person.fullName(),
+				email,
+				password: faker.internet.password({ length: 10 }),
+			});
+
+	beforeAll(async () => {
+		const auth = betterAuth({
+			basePath: "/api/auth",
+			emailAndPassword: { enabled: true },
+			plugins: [bearer()],
+			databaseHooks: {
+				user: {
+					create: {
+						before: async (user) => {
+							if (user.email.startsWith("blocked-")) return false;
+							return { data: { name: "from-database-hook" } };
+						},
+					},
+				},
+			},
+		});
+
+		@Module({
+			imports: [AuthModule.forRoot({ auth })],
+			providers: [
+				BeforeCreateTracker,
+				UserBeforeCreateHookOne,
+				UserBeforeCreateHookTwo,
+			],
+		})
+		class AppModule {}
+
+		const moduleRef = await Test.createTestingModule({
+			imports: [AppModule],
+		}).compile();
+
+		app = await createTestNestApplication(moduleRef);
+	});
+
+	afterAll(async () => {
+		await app.close();
+	});
+
+	it("should keep the data returned by the original databaseHooks before hook", async () => {
+		const response = await signUp().expect(200);
+
+		expect(response.body.user.name).toBe("from-database-hook");
+	});
+
+	it("should keep the data returned by an earlier @BeforeCreate provider", async () => {
+		const response = await signUp().expect(200);
+
+		expect(response.body.user.image).toBe("https://example.com/avatar.png");
+	});
+
+	it("should pass the merged data to the next @BeforeCreate provider", async () => {
+		const tracker = app.get(BeforeCreateTracker);
+		tracker.received = [];
+
+		await signUp().expect(200);
+
+		expect(tracker.received).toEqual([
+			{ name: "from-database-hook", image: "https://example.com/avatar.png" },
+		]);
+	});
+
+	it("should abort the operation when the original before hook returns false", async () => {
+		const tracker = app.get(BeforeCreateTracker);
+		tracker.received = [];
+
+		const response = await signUp(`blocked-${faker.internet.email()}`);
+
+		expect(response.status).not.toBe(200);
+		expect(tracker.received).toEqual([]);
+	});
+});
+
 describe("database hooks configuration validation", () => {
 	it("should throw if database hook providers exist without databaseHooks configured", async () => {
 		const auth = betterAuth({
