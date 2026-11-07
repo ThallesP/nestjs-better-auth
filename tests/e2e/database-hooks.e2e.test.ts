@@ -165,6 +165,7 @@ describe("database hooks e2e", () => {
 
 @Injectable()
 class BeforeCreateTracker {
+	originalCalls = 0;
 	received: { name?: string; image?: string }[] = [];
 }
 
@@ -174,6 +175,15 @@ class UserBeforeCreateHookOne {
 	@BeforeCreate("user")
 	async beforeCreate() {
 		return { data: { image: "https://example.com/avatar.png" } };
+	}
+}
+
+@DatabaseHook()
+@Injectable()
+class UserBeforeCreateBlockingHook {
+	@BeforeCreate("user")
+	async beforeCreate(user: { email: string }) {
+		if (user.email.startsWith("provider-blocked-")) return false;
 	}
 }
 
@@ -190,6 +200,8 @@ class UserBeforeCreateHookTwo {
 
 describe("database hooks return values", () => {
 	let app: INestApplication;
+	let auth: ReturnType<typeof betterAuth>;
+	const tracker = new BeforeCreateTracker();
 
 	const signUp = (email = faker.internet.email()) =>
 		request(app.getHttpServer())
@@ -202,7 +214,7 @@ describe("database hooks return values", () => {
 			});
 
 	beforeAll(async () => {
-		const auth = betterAuth({
+		auth = betterAuth({
 			basePath: "/api/auth",
 			emailAndPassword: { enabled: true },
 			plugins: [bearer()],
@@ -210,6 +222,7 @@ describe("database hooks return values", () => {
 				user: {
 					create: {
 						before: async (user) => {
+							tracker.originalCalls += 1;
 							if (user.email.startsWith("blocked-")) return false;
 							return { data: { name: "from-database-hook" } };
 						},
@@ -221,8 +234,9 @@ describe("database hooks return values", () => {
 		@Module({
 			imports: [AuthModule.forRoot({ auth })],
 			providers: [
-				BeforeCreateTracker,
+				{ provide: BeforeCreateTracker, useValue: tracker },
 				UserBeforeCreateHookOne,
+				UserBeforeCreateBlockingHook,
 				UserBeforeCreateHookTwo,
 			],
 		})
@@ -262,14 +276,37 @@ describe("database hooks return values", () => {
 		]);
 	});
 
+	// Better Auth's createWithHooks returns null on false, which sign-up
+	// answers with FAILED_TO_CREATE_USER (400).
+	const expectAborted = async (email: string, response: request.Response) => {
+		expect(response.status).toBe(400);
+		expect(response.body.code).toBe("FAILED_TO_CREATE_USER");
+		const { internalAdapter } = await auth.$context;
+		expect(await internalAdapter.findUserByEmail(email)).toBeNull();
+	};
+
 	it("should abort the operation when the original before hook returns false", async () => {
-		const tracker = app.get(BeforeCreateTracker);
+		tracker.originalCalls = 0;
 		tracker.received = [];
+		const email = `blocked-${faker.internet.email()}`;
 
-		const response = await signUp(`blocked-${faker.internet.email()}`);
+		const response = await signUp(email);
 
-		expect(response.status).not.toBe(200);
+		expect(tracker.originalCalls).toBe(1);
 		expect(tracker.received).toEqual([]);
+		await expectAborted(email, response);
+	});
+
+	it("should abort the operation when a @BeforeCreate provider returns false", async () => {
+		tracker.originalCalls = 0;
+		tracker.received = [];
+		const email = `provider-blocked-${faker.internet.email()}`;
+
+		const response = await signUp(email);
+
+		expect(tracker.originalCalls).toBe(1);
+		expect(tracker.received).toEqual([]);
+		await expectAborted(email, response);
 	});
 });
 
