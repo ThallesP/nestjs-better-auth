@@ -480,6 +480,10 @@ async function runWrappedHook(
 	return response;
 }
 
+/**
+ * Whether a value is a plain object literal (not an array, `Headers`, a
+ * `Response` or a class instance).
+ */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return (
 		!!value &&
@@ -488,6 +492,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 	);
 }
 
+/**
+ * Whether a hook result is the `{ context }` Better Auth merges into the
+ * request, as opposed to a response that ends it.
+ */
 function hasHookContext(
 	result: unknown,
 ): result is { context: Record<string, unknown> } {
