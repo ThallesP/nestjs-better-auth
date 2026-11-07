@@ -10,6 +10,10 @@ import type { TestingModule } from "@nestjs/testing";
 
 const testHttpAdapter = process.env.TEST_HTTP_ADAPTER ?? "express";
 
+/**
+ * Builds the Nest HTTP adapter selected by `TEST_HTTP_ADAPTER`
+ * (`express` by default, `fastify` or `node`).
+ */
 export function createTestHttpAdapter() {
 	if (testHttpAdapter === "fastify") {
 		return new FastifyAdapter();

@@ -179,6 +179,11 @@ export class AuthModule
 		}
 	}
 
+	/**
+	 * Mounts Better Auth on the active HTTP adapter. Express, Node and Hono skip
+	 * body parsing under the base path through `SkipBodyParsingMiddleware`
+	 * (Hono mounts the handler directly); Fastify gets its own parser setup.
+	 */
 	configure(consumer: MiddlewareConsumer): void {
 		const adapterType = this.adapter.httpAdapter.getType();
 		const trustedOrigins = this.options.auth.options.trustedOrigins;

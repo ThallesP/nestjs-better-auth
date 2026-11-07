@@ -39,7 +39,11 @@ export function createTestAuth(authOptions?: Partial<BetterAuthOptions>) {
 	});
 }
 
-// Test app module factory
+/**
+ * Test app module factory. Registers `AuthModule` (sync or async) plus the
+ * test controller, resolver and gateway; GraphQL is left out under the Node
+ * adapter because Apollo's driver does not support it.
+ */
 export function createTestAppModule(
 	async: boolean,
 	auth: ReturnType<typeof createTestAuth>,
